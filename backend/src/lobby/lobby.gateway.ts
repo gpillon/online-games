@@ -101,6 +101,7 @@ export class LobbyGateway
         if (room.gameId && room.players.some((p) => p.id === user.id)) {
           void client.join(`room:${room.id}`);
           client.data.roomId = room.id;
+          client.data.spectator = false;
           this.lobbyService.markPlayerConnection(room.id, user.id, true);
           const engine = this.gamesService.tryGetEngine(room.gameId);
           if (engine) {
@@ -270,11 +271,10 @@ export class LobbyGateway
     if (!engine) throw new WsException('Game not found');
     const isPlayer = room.players.some((p) => p.id === userId);
     if (isPlayer) {
-      if (!client.data.roomId) {
-        client.data.roomId = room.id;
-        void client.join(`room:${room.id}`);
-        this.lobbyService.markPlayerConnection(room.id, userId, true);
-      }
+      client.data.roomId = room.id;
+      client.data.spectator = false;
+      void client.join(`room:${room.id}`);
+      this.lobbyService.markPlayerConnection(room.id, userId, true);
       client.emit(WS_EVENTS.GAME_STATE, engine.getClientState(userId));
     } else {
       void client.join(`room:${room.id}`);
@@ -323,45 +323,48 @@ export class LobbyGateway
     const userId = client.data.userId as string;
     const roomId =
       body.roomId ?? (client.data.roomId as string | undefined) ?? '';
-    const room = this.lobbyService.getRoom(roomId);
-    if (room.gameId !== body.gameId) {
-      throw new WsException('Game mismatch');
-    }
-    const engine = this.gamesService.getEngine(body.gameId);
-    const current = engine.getCurrentPlayerId();
-    if (current !== userId) {
-      throw new WsException('Not your turn');
-    }
-    this.lobbyService.touchHumanActivity(roomId);
-    const move =
-      body.move ??
-      (body.type === 'play_card'
-        ? { type: 'play', cardId: (body.data as { cardId: string })?.cardId }
-        : body.data);
-    const result = engine.makeMove(userId, move);
-    if (!result.success) {
-      this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_ERROR, {
-        message: result.error,
+
+    return this.lobbyService.runExclusive(roomId, async () => {
+      const room = this.lobbyService.getRoom(roomId);
+      if (room.gameId !== body.gameId) {
+        throw new WsException('Game mismatch');
+      }
+      const engine = this.gamesService.getEngine(body.gameId);
+      const current = engine.getCurrentPlayerId();
+      if (current !== userId) {
+        throw new WsException('Not your turn');
+      }
+      this.lobbyService.touchHumanActivity(roomId);
+      const move =
+        body.move ??
+        (body.type === 'play_card'
+          ? { type: 'play', cardId: (body.data as { cardId: string })?.cardId }
+          : body.data);
+      const result = engine.makeMove(userId, move);
+      if (!result.success) {
+        this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_ERROR, {
+          message: result.error,
+        });
+        return result;
+      }
+      this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_MOVE_RESULT, {
+        userId,
+        result,
       });
+      if (result.trickComplete) {
+        this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_TRICK_COMPLETE, {
+          trickWinner: result.trickWinner,
+        });
+      }
+      if (result.handComplete) {
+        this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_HAND_COMPLETE, {
+          teamScores: (engine.getState() as { teamScores: [number, number] })
+            .teamScores,
+        });
+      }
+      await this.emitAfterMove(roomId, body.gameId, engine, result, room);
       return result;
-    }
-    this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_MOVE_RESULT, {
-      userId,
-      result,
     });
-    if (result.trickComplete) {
-      this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_TRICK_COMPLETE, {
-        trickWinner: result.trickWinner,
-      });
-    }
-    if (result.handComplete) {
-      this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_HAND_COMPLETE, {
-        teamScores: (engine.getState() as { teamScores: [number, number] })
-          .teamScores,
-      });
-    }
-    await this.emitAfterMove(roomId, body.gameId, engine, result, room);
-    return result;
   }
 
   @SubscribeMessage(WS_EVENTS.ROOM_CLOSE)
@@ -544,6 +547,11 @@ export class LobbyGateway
   }
 
   private async persistScores(room: LobbyRoom, engine: IGameEngine) {
+    const hasBots = room.players.some((p) => p.type === PlayerType.AI);
+    if (hasBots) {
+      this.logger.debug('Skipping score recording: game includes bots');
+      return;
+    }
     const results = engine.getResults() as {
       winningTeam: number;
       teamScores: [number, number];
@@ -562,10 +570,8 @@ export class LobbyGateway
       if (!dbUser) continue;
       const team = p.team ?? 0;
       const won = team === results.winningTeam;
-      if (roomPlayer.type === PlayerType.HUMAN) {
-        if (won) winnerHumanIds.push(p.id);
-        else loserHumanIds.push(p.id);
-      }
+      if (won) winnerHumanIds.push(p.id);
+      else loserHumanIds.push(p.id);
       const teammates = results.players.filter((x) => (x.team ?? 0) === team);
       const pointsShare =
         results.teamScores[team] / Math.max(1, teammates.length);

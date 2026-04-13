@@ -5,6 +5,15 @@ import { GlassPanel } from '@/components/ui/Card';
 import { apiFetch } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 
+function formatFraction(n: number): string {
+  const third = n % 1;
+  const whole = Math.floor(n);
+  if (Math.abs(third) < 0.01) return String(whole);
+  if (Math.abs(third - 1 / 3) < 0.01) return `${whole}\u2153`;
+  if (Math.abs(third - 2 / 3) < 0.01) return `${whole}\u2154`;
+  return n.toFixed(1);
+}
+
 export function ProfilePage() {
   const { user, token, checkAuth } = useAuthStore();
   const [profile, setProfile] = useState<UserProfile | null>(user);
@@ -56,11 +65,12 @@ export function ProfilePage() {
         </div>
       </GlassPanel>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         {[
-          { label: 'Partite', value: p.stats.gamesPlayed },
-          { label: 'Vittorie', value: p.stats.gamesWon },
-          { label: 'Punti', value: p.stats.totalPoints },
+          { label: 'Partite', value: String(p.stats.gamesPlayed) },
+          { label: 'Vittorie', value: String(p.stats.gamesWon) },
+          { label: 'Punti', value: formatFraction(p.stats.totalPoints) },
+          { label: 'Win %', value: p.stats.gamesPlayed ? `${((p.stats.gamesWon / p.stats.gamesPlayed) * 100).toFixed(1)}%` : '—' },
         ].map((s) => (
           <GlassPanel key={s.label} className="p-5 text-center">
             <p className="font-display text-3xl text-gold">{s.value}</p>

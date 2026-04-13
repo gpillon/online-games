@@ -41,7 +41,7 @@ export interface LobbyRoom {
 export class LobbyService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LobbyService.name);
   private readonly rooms = new Map<string, LobbyRoom>();
-  private readonly processing = new Set<string>();
+  private readonly locks = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly gamesService: GamesService,
@@ -220,7 +220,7 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
       this.gamesService.removeGame(room.gameId);
     }
     this.rooms.delete(roomId);
-    this.processing.delete(roomId);
+    this.locks.delete(roomId);
   }
 
   closeRoom(roomId: string, requesterId: string): void {
@@ -358,18 +358,24 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
   }
 
   isRoomProcessing(roomId: string): boolean {
-    return this.processing.has(roomId);
+    return this.locks.has(roomId);
   }
 
   async runExclusive<T>(roomId: string, fn: () => Promise<T>): Promise<T> {
-    if (this.processing.has(roomId)) {
-      throw new BadRequestException('Room is busy');
-    }
-    this.processing.add(roomId);
+    const prev = this.locks.get(roomId) ?? Promise.resolve();
+    let releaseFn!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseFn = r;
+    });
+    this.locks.set(roomId, gate);
     try {
+      await prev;
       return await fn();
     } finally {
-      this.processing.delete(roomId);
+      releaseFn();
+      if (this.locks.get(roomId) === gate) {
+        this.locks.delete(roomId);
+      }
     }
   }
 

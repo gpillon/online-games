@@ -5,6 +5,20 @@ import { useEffect, useState } from 'react';
 import { GlassPanel } from '@/components/ui/Card';
 import { apiFetch } from '@/services/api';
 
+function formatFraction(n: number): string {
+  const third = n % 1;
+  const whole = Math.floor(n);
+  if (Math.abs(third) < 0.01) return String(whole);
+  if (Math.abs(third - 1 / 3) < 0.01) return `${whole}\u2153`;
+  if (Math.abs(third - 2 / 3) < 0.01) return `${whole}\u2154`;
+  return n.toFixed(1);
+}
+
+function pct(n: number): string {
+  const v = n <= 1 ? n * 100 : n;
+  return `${v.toFixed(1)}%`;
+}
+
 export function LeaderboardPage() {
   const [rows, setRows] = useState<LeaderboardEntry[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -36,7 +50,7 @@ export function LeaderboardPage() {
               <th className="px-4 py-3 text-right">Punti</th>
               <th className="hidden px-4 py-3 text-right md:table-cell">Partite</th>
               <th className="hidden px-4 py-3 text-right md:table-cell">Vinte</th>
-              <th className="hidden px-4 py-3 text-right md:table-cell">%</th>
+              <th className="hidden px-4 py-3 text-right md:table-cell">Win %</th>
             </tr>
           </thead>
           <tbody>
@@ -63,11 +77,13 @@ export function LeaderboardPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-ivory">{r.username}</td>
-                  <td className="px-4 py-3 text-right text-gold">{r.totalPoints}</td>
+                  <td className="px-4 py-3 text-right text-gold">{formatFraction(r.totalPoints)}</td>
                   <td className="hidden px-4 py-3 text-right text-gold/80 md:table-cell">{r.gamesPlayed}</td>
-                  <td className="hidden px-4 py-3 text-right text-gold/80 md:table-cell">{r.gamesWon}</td>
+                  <td className="hidden px-4 py-3 text-right text-gold/80 md:table-cell">
+                    {r.gamesWon} <span className="text-xs text-gold/50">({pct(r.winRate)})</span>
+                  </td>
                   <td className="hidden px-4 py-3 text-right text-gold/70 md:table-cell">
-                    {((r.winRate <= 1 ? r.winRate * 100 : r.winRate) as number).toFixed(0)}%
+                    {pct(r.winRate)}
                   </td>
                 </motion.tr>
               ))
