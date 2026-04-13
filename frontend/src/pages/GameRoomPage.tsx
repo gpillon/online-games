@@ -207,7 +207,7 @@ export function GameRoomPage() {
           </div>
         </GlassPanel>
 
-        {isHost && (
+        {isHost && room.status === OG.GameStatus.WAITING && (
           <Button type="button" variant="primary" className="w-full md:w-auto" onClick={() => startGame(room.id)}>
             Inizia Partita
           </Button>

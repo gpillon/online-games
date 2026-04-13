@@ -1,12 +1,22 @@
 import * as OG from '@online-games/shared';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { Crown, Sparkles } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { GlassPanel } from '@/components/ui/Card';
 import { getGameEntry } from '@/games/registry';
 
-const heroCards = ['/cards/denara1.png', '/cards/coppe10.png', '/cards/spade3.png', '/cards/bastoni7.png'];
+const allCards = [
+  'bastoni', 'coppe', 'denara', 'spade',
+].flatMap((suit) =>
+  Array.from({ length: 10 }, (_, i) => `/cards/${suit}${i + 1}.png`),
+);
+
+function pickRandom<T>(arr: T[], n: number): T[] {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, n);
+}
 
 const features = [
   {
@@ -32,6 +42,7 @@ const features = [
 export function HomePage() {
   const { scrollY } = useScroll();
   const bgY = useTransform(scrollY, [0, 400], [0, 80]);
+  const heroCards = useMemo(() => pickRandom(allCards, 4), []);
 
   return (
     <div className="relative overflow-hidden">

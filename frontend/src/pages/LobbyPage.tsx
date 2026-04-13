@@ -1,7 +1,7 @@
 import * as OG from '@online-games/shared';
-import { TressetteMode } from '@online-games/shared';
+import { GameStatus, TressetteMode } from '@online-games/shared';
 import { motion } from 'framer-motion';
-import { Copy, Lock, Users } from 'lucide-react';
+import { Copy, Lock, Play, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
@@ -10,8 +10,16 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { getGameEntry } from '@/games/registry';
 import { useSocket } from '@/hooks/useSocket';
+import { apiFetch } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useLobbyStore } from '@/stores/lobbyStore';
+
+interface MyGame {
+  roomId: string;
+  gameId: string;
+  name: string;
+  status: GameStatus;
+}
 
 const games: { id: string; type?: OG.GameType; label: string; active: boolean }[] = [
   { id: 'tressette', type: OG.GameType.TRESSETTE, label: getGameEntry(OG.GameType.TRESSETTE).title, active: true },
@@ -41,6 +49,7 @@ export function LobbyPage() {
   const [password, setPassword] = useState('');
   const [autoLoginDone, setAutoLoginDone] = useState(!!token);
   const [copied, setCopied] = useState<string | null>(null);
+  const [myGames, setMyGames] = useState<MyGame[]>([]);
 
   useEffect(() => {
     if (!token && !autoLoginDone) {
@@ -49,6 +58,11 @@ export function LobbyPage() {
       setAutoLoginDone(true);
     }
   }, [token, autoLoginDone, loginAnonymous]);
+
+  useEffect(() => {
+    if (!autoLoginDone || !token) return;
+    void apiFetch<MyGame[]>('/lobby/my-games', { token }).then(setMyGames).catch(() => {});
+  }, [autoLoginDone, token]);
 
   useSocket(autoLoginDone);
 
@@ -88,6 +102,30 @@ export function LobbyPage() {
           ))}
         </div>
       </section>
+
+      {myGames.length > 0 && (
+        <section>
+          <h2 className="mb-4 font-display text-xl tracking-wide text-gold">Le tue partite attive</h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {myGames.map((g) => (
+              <GlassPanel key={g.roomId} className="flex items-center justify-between gap-4 p-5 ring-1 ring-gold/40">
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate font-display text-lg text-ivory">{g.name}</h3>
+                  <p className="text-xs uppercase tracking-wider text-gold/60">
+                    {g.status === GameStatus.IN_PROGRESS ? 'In corso' : 'In attesa'}
+                  </p>
+                </div>
+                <Link to={g.gameId ? `/game/${g.gameId}` : `/room/${g.roomId}`}>
+                  <Button type="button" variant="primary" className="flex items-center gap-2">
+                    <Play className="h-4 w-4" />
+                    Rientra
+                  </Button>
+                </Link>
+              </GlassPanel>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <h2 className="font-display text-xl tracking-wide text-gold">Stanze aperte</h2>

@@ -4,12 +4,10 @@ import {
   Get,
   Param,
   Post,
-  Req,
   UseGuards,
 } from '@nestjs/common';
-import { CreateRoomRequest, RoomListItem } from '@online-games/shared';
+import { CreateRoomRequest, GameStatus, RoomListItem } from '@online-games/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OptionalAuthGuard } from '../auth/optional-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { LobbyService, LobbyRoom } from './lobby.service';
 
@@ -34,5 +32,25 @@ export class LobbyController {
   @Get('rooms/:id')
   getRoom(@Param('id') id: string): LobbyRoom {
     return this.lobbyService.getRoom(id);
+  }
+
+  @Get('my-games')
+  @UseGuards(JwtAuthGuard)
+  getMyActiveGames(
+    @CurrentUser() user: { id: string },
+  ): { roomId: string; gameId: string; name: string; status: GameStatus }[] {
+    return this.lobbyService
+      .listAllRooms()
+      .filter(
+        (r) =>
+          r.players.some((p) => p.id === user.id) &&
+          (r.status === GameStatus.IN_PROGRESS || r.status === GameStatus.WAITING),
+      )
+      .map((r) => ({
+        roomId: r.id,
+        gameId: r.gameId ?? '',
+        name: r.name,
+        status: r.status,
+      }));
   }
 }

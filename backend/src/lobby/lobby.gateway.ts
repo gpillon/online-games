@@ -311,19 +311,7 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
           .teamScores,
       });
     }
-    if (result.trickComplete) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 1200));
-    }
-    await this.emitGameState(roomId, body.gameId);
-    if (result.gameOver) {
-      this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_OVER, {
-        results: engine.getResults(),
-      });
-      await this.persistScores(room, engine);
-      this.lobbyService.finishRoomGame(roomId);
-    } else {
-      await this.maybeScheduleAi(roomId, body.gameId);
-    }
+    await this.emitAfterMove(roomId, body.gameId, engine, result, room);
     return result;
   }
 
@@ -348,6 +336,49 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private emitRoomsUpdate() {
     this.server.to('lobby').emit(WS_EVENTS.LOBBY_ROOMS_UPDATE, this.lobbyService.listRooms());
+  }
+
+  private async emitAfterMove(
+    roomId: string,
+    gameId: string,
+    engine: IGameEngine,
+    result: { success: boolean; trickComplete?: boolean; gameOver?: boolean },
+    room: LobbyRoom,
+  ) {
+    if (result.trickComplete) {
+      await this.emitGameStateWithLastTrick(roomId, engine, room);
+      await new Promise<void>((r) => setTimeout(r, 1400));
+    }
+    await this.emitGameState(roomId, gameId);
+    if (result.gameOver) {
+      this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_OVER, {
+        results: engine.getResults(),
+      });
+      await this.persistScores(room, engine);
+      this.lobbyService.finishRoomGame(roomId);
+    } else {
+      await this.maybeScheduleAi(roomId, gameId);
+    }
+  }
+
+  private async emitGameStateWithLastTrick(
+    roomId: string,
+    engine: IGameEngine,
+    room: LobbyRoom,
+  ) {
+    const sockets = await this.server.in(`room:${roomId}`).fetchSockets();
+    for (const s of sockets) {
+      const uid = s.data.userId as string | undefined;
+      if (!uid) continue;
+      if (s.data.spectator) {
+        const raw = engine.getSpectatorState?.() ?? engine.getClientState('__spectator');
+        const state = raw as Record<string, unknown>;
+        s.emit(WS_EVENTS.GAME_STATE, { ...state, currentTrick: state['lastTrick'] ?? [] });
+      } else if (room.players.some((p) => p.id === uid)) {
+        const state = engine.getClientState(uid) as Record<string, unknown>;
+        s.emit(WS_EVENTS.GAME_STATE, { ...state, currentTrick: state['lastTrick'] ?? [] });
+      }
+    }
   }
 
   private async emitGameState(roomId: string, gameId: string) {
@@ -420,20 +451,8 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
               .teamScores,
           });
       }
-      if (result.trickComplete) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 1200));
-      }
-      await this.emitGameState(roomId, gameId);
-      if (result.gameOver) {
-        const room = this.lobbyService.getRoom(roomId);
-        this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_OVER, {
-          results: engine.getResults(),
-        });
-        await this.persistScores(room, engine);
-        this.lobbyService.finishRoomGame(roomId);
-      } else {
-        await this.maybeScheduleAi(roomId, gameId);
-      }
+      const room = this.lobbyService.getRoom(roomId);
+      await this.emitAfterMove(roomId, gameId, engine, result, room);
     });
   }
 
