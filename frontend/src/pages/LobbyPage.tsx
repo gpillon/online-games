@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { getGameEntry } from '@/games/registry';
 import { useSocket } from '@/hooks/useSocket';
+import { useAuthStore } from '@/stores/authStore';
 import { useLobbyStore } from '@/stores/lobbyStore';
 
 const games: { id: string; type?: OG.GameType; label: string; active: boolean }[] = [
@@ -18,17 +19,29 @@ const games: { id: string; type?: OG.GameType; label: string; active: boolean }[
 ];
 
 export function LobbyPage() {
-  useSocket(true);
   const navigate = useNavigate();
   const { rooms, fetchRooms, subscribeLobby, unsubscribeLobby, createRoom, loading, error } = useLobbyStore();
+  const { user, token, loginAnonymous } = useAuthStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [roomName, setRoomName] = useState('Sala privata');
+  const [autoLoginDone, setAutoLoginDone] = useState(!!token);
 
   useEffect(() => {
+    if (!token && !autoLoginDone) {
+      void loginAnonymous().then(() => setAutoLoginDone(true));
+    } else {
+      setAutoLoginDone(true);
+    }
+  }, [token, autoLoginDone, loginAnonymous]);
+
+  useSocket(autoLoginDone);
+
+  useEffect(() => {
+    if (!autoLoginDone) return;
     void fetchRooms();
     subscribeLobby();
     return () => unsubscribeLobby();
-  }, [fetchRooms, subscribeLobby, unsubscribeLobby]);
+  }, [autoLoginDone, fetchRooms, subscribeLobby, unsubscribeLobby]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 px-4 py-10">
