@@ -2,6 +2,14 @@ replicaCount:
   frontend: 2
   backend: 2
 
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: NotIn
+            values: []
+
 image:
   frontend:
     repository: ghcr.io/OWNER/online-games-frontend

@@ -70,6 +70,22 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
       client.data.userId = user.id;
       client.data.username = user.username;
+      // Auto-rejoin active game rooms
+      const rooms = this.lobbyService.listAllRooms();
+      for (const room of rooms) {
+        if (room.gameId && room.players.some((p) => p.id === user.id)) {
+          void client.join(`room:${room.id}`);
+          client.data.roomId = room.id;
+          this.lobbyService.markPlayerConnection(room.id, user.id, true);
+          const engine = this.gamesService.tryGetEngine(room.gameId);
+          if (engine) {
+            setTimeout(() => {
+              client.emit(WS_EVENTS.GAME_STATE, engine.getClientState(user.id));
+            }, 500);
+          }
+          break;
+        }
+      }
       this.logger.debug(`Client connected ${client.id} as ${user.username}`);
     } catch (err) {
       this.logger.warn(`WS auth failed for ${client.id}: ${String(err)}`);
@@ -101,23 +117,24 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(WS_EVENTS.ROOM_CREATE)
-  handleRoomCreate(
+  async handleRoomCreate(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: CreateRoomRequest,
   ) {
     const userId = client.data.userId as string;
     const username = client.data.username as string;
+    this.logger.debug(`ROOM_CREATE from ${username}: ${JSON.stringify(body)}`);
     const room = this.lobbyService.createRoom(userId, username, body);
-    void client.join(`room:${room.id}`);
+    await client.join(`room:${room.id}`);
     client.data.roomId = room.id;
     this.lobbyService.markPlayerConnection(room.id, userId, true);
-    this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_UPDATE, room);
+    client.emit(WS_EVENTS.ROOM_UPDATE, room);
     this.emitRoomsUpdate();
     return { room };
   }
 
   @SubscribeMessage(WS_EVENTS.ROOM_JOIN)
-  handleRoomJoin(
+  async handleRoomJoin(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: JoinRoomRequest,
   ) {
@@ -129,7 +146,7 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
       username,
       body.password,
     );
-    void client.join(`room:${room.id}`);
+    await client.join(`room:${room.id}`);
     client.data.roomId = room.id;
     this.lobbyService.markPlayerConnection(room.id, userId, true);
     this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_PLAYER_JOINED, {
@@ -188,6 +205,7 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() body: { roomId: string },
   ) {
     const userId = client.data.userId as string;
+    this.logger.debug(`Starting game for room ${body.roomId} by ${userId}`);
     const { gameId } = this.lobbyService.startGame(body.roomId, userId);
     const room = this.lobbyService.getRoom(body.roomId);
     this.server
@@ -195,6 +213,7 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
       .emit(WS_EVENTS.ROOM_UPDATE, { ...room, activeGameId: gameId });
     await this.emitGameState(room.id, gameId);
     this.emitRoomsUpdate();
+    this.logger.debug(`Game ${gameId} started, scheduling AI`);
     await this.maybeScheduleAi(room.id, gameId);
     return { gameId };
   }
@@ -218,6 +237,26 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.lobbyService.markPlayerConnection(room.id, userId, true);
     }
     client.emit(WS_EVENTS.GAME_STATE, engine.getClientState(userId));
+    return { ok: true };
+  }
+
+  @SubscribeMessage(WS_EVENTS.ROOM_SPECTATE)
+  async handleSpectate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string },
+  ) {
+    const room = this.lobbyService.tryGetRoom(body.roomId);
+    if (!room) throw new WsException('Room not found');
+    void client.join(`room:${room.id}`);
+    client.data.roomId = room.id;
+    client.data.spectator = true;
+    client.emit(WS_EVENTS.ROOM_UPDATE, room);
+    if (room.gameId) {
+      const engine = this.gamesService.tryGetEngine(room.gameId);
+      if (engine) {
+        client.emit(WS_EVENTS.GAME_STATE, engine.getSpectatorState?.() ?? engine.getClientState('__spectator'));
+      }
+    }
     return { ok: true };
   }
 
@@ -272,6 +311,9 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
           .teamScores,
       });
     }
+    if (result.trickComplete) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+    }
     await this.emitGameState(roomId, body.gameId);
     if (result.gameOver) {
       this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_OVER, {
@@ -315,17 +357,27 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const sockets = await this.server.in(`room:${roomId}`).fetchSockets();
     for (const s of sockets) {
       const uid = s.data.userId as string | undefined;
-      if (!uid || !room.players.some((p) => p.id === uid)) continue;
-      s.emit(WS_EVENTS.GAME_STATE, engine.getClientState(uid));
+      if (!uid) continue;
+      if (s.data.spectator) {
+        s.emit(WS_EVENTS.GAME_STATE, engine.getSpectatorState?.() ?? engine.getClientState('__spectator'));
+      } else if (room.players.some((p) => p.id === uid)) {
+        s.emit(WS_EVENTS.GAME_STATE, engine.getClientState(uid));
+      }
     }
   }
 
   private async maybeScheduleAi(roomId: string, gameId: string) {
     const engine = this.gamesService.tryGetEngine(gameId);
-    if (!engine || engine.isGameOver()) return;
+    if (!engine || engine.isGameOver()) {
+      this.logger.debug(`maybeScheduleAi: engine missing or game over`);
+      return;
+    }
     const room = this.lobbyService.getRoom(roomId);
     const currentId = engine.getCurrentPlayerId();
     const player = room.players.find((p) => p.id === currentId);
+    this.logger.debug(
+      `maybeScheduleAi: currentPlayer=${currentId} type=${player?.type} name=${player?.name}`,
+    );
     if (!player || player.type !== PlayerType.AI) return;
     const delay = 600 + Math.floor(Math.random() * 900);
     setTimeout(() => {
@@ -338,8 +390,10 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const engine = this.gamesService.tryGetEngine(gameId);
       if (!engine || engine.isGameOver()) return;
       if (engine.getCurrentPlayerId() !== expectedPlayer) return;
+      this.logger.debug(`AI turn: ${expectedPlayer} in game ${gameId}`);
       const state = engine.getClientState(expectedPlayer);
       const move = this.ai.chooseMove(state, expectedPlayer);
+      this.logger.debug(`AI move: ${JSON.stringify(move)}`);
       const result = engine.makeMove(expectedPlayer, move);
       if (!result.success) {
         this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_ERROR, {
@@ -365,6 +419,9 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
             teamScores: (engine.getState() as { teamScores: [number, number] })
               .teamScores,
           });
+      }
+      if (result.trickComplete) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1200));
       }
       await this.emitGameState(roomId, gameId);
       if (result.gameOver) {

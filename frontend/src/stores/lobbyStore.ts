@@ -20,6 +20,7 @@ interface LobbyState {
   addAi: (roomId: string, seatIndex?: number) => void;
   startGame: (roomId: string) => void;
   sendChat: (roomId: string, message: string) => void;
+  spectateRoom: (roomId: string) => void;
   setCurrentRoom: (room: GameRoom | null) => void;
   appendChat: (msg: ChatMessage) => void;
   patchCurrentRoom: (room: GameRoom) => void;
@@ -92,7 +93,7 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
       body: req,
       token,
     });
-    set({ currentRoom: room });
+    set({ currentRoom: room, chatMessages: [] });
     return room;
   },
 
@@ -143,5 +144,11 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
 
   sendChat: (roomId, message) => {
     getSocket()?.emit(WS_EVENTS.ROOM_CHAT, { roomId, message });
+  },
+
+  spectateRoom: (roomId) => {
+    const s = getSocket();
+    if (!s) return;
+    s.emit(WS_EVENTS.ROOM_SPECTATE, { roomId });
   },
 }));

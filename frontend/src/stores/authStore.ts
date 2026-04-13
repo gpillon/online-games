@@ -93,8 +93,8 @@ export const useAuthStore = create<AuthState>()(
         }
         set({ loading: true, error: null });
         try {
-          const profile = await apiFetch<UserProfile>('/auth/me', { token });
-          set({ user: profile, loading: false });
+          const res = await apiFetch<AuthResponse>('/auth/me', { token });
+          set({ user: res.user, loading: false });
         } catch {
           set({ user: null, token: null, loading: false });
         }

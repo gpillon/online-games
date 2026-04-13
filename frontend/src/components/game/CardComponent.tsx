@@ -33,6 +33,8 @@ export function CardComponent({
   return (
     <motion.div
       layoutId={layoutId}
+      role={disabled ? undefined : 'button'}
+      tabIndex={disabled ? undefined : 0}
       className={`relative cursor-pointer select-none ${className}`}
       style={{ width: w, height: h, ...style }}
       whileHover={
@@ -42,6 +44,12 @@ export function CardComponent({
       }
       whileTap={disabled ? undefined : { scale: 0.97 }}
       onClick={disabled ? undefined : onClick}
+      onKeyDown={disabled ? undefined : (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
     >
       <div
         className={`

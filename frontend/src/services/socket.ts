@@ -32,11 +32,12 @@ export function disconnectSocket(): void {
 }
 
 export function setSocketAuthToken(token: string | null): void {
-  if (socket) {
-    socket.auth = token ? { token } : {};
-    if (socket.connected) {
-      socket.disconnect();
-      socket.connect();
-    }
+  if (!socket) return;
+  const currentToken = (socket.auth as { token?: string })?.token ?? null;
+  if (currentToken === token) return;
+  socket.auth = token ? { token } : {};
+  if (socket.connected) {
+    socket.disconnect();
+    socket.connect();
   }
 }

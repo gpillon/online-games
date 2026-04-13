@@ -4,6 +4,7 @@ export interface IGameEngine {
   getGameId(): string;
   getState(): unknown;
   getClientState(playerId: string): unknown;
+  getSpectatorState?(): unknown;
   makeMove(playerId: string, move: unknown): MoveResult;
   isValidMove(playerId: string, move: unknown): boolean;
   getCurrentPlayerId(): string;

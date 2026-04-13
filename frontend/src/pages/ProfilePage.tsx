@@ -19,7 +19,7 @@ export function ProfilePage() {
       setProfile(null);
       return;
     }
-    void apiFetch<UserProfile>('/profile', { token })
+    void apiFetch<UserProfile>('/users/profile', { token })
       .then(setProfile)
       .catch(() => setErr('Profilo non disponibile.'));
   }, [token]);

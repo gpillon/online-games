@@ -535,6 +535,39 @@ export class TressetteEngine implements IGameEngine {
     this.declarations.push(entry);
   }
 
+  getSpectatorState(): unknown {
+    const others = this.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      seatIndex: p.seatIndex,
+      cardCount: (this.hands[p.id] ?? []).length,
+      team: p.team ?? 0,
+      connected: p.connected ?? true,
+      isAI: p.type === PlayerType.AI,
+      isMorto: false,
+    }));
+    return {
+      gameId: this.gameId,
+      myHand: [],
+      currentTrick: this.currentTrick,
+      lastTrick: this.lastTrick,
+      currentPlayerIndex: this.currentSeat,
+      myIndex: -1,
+      players: others,
+      teamScores: this.teamScores,
+      deckRemaining: this.stock.length,
+      status: this.status,
+      mode: this.mode,
+      dealer: this.dealerSeat,
+      handNumber: this.handNumber,
+      targetScore: this.targetScore,
+      trickWinner: this.lastTrickWinnerId(),
+      declarations: [...this.declarations],
+      canDeclare: false,
+      spectator: true,
+    };
+  }
+
   markPlayerConnected(playerId: string, connected: boolean): void {
     const p = this.players.find((x) => x.id === playerId);
     if (p) p.connected = connected;

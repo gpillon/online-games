@@ -2,7 +2,7 @@ import type { ChatMessage, GameRoom, TressetteClientState } from '@online-games/
 import * as OG from '@online-games/shared';
 import { WS_EVENTS } from '@/lib/wsEvents';
 import { motion } from 'framer-motion';
-import { Send } from 'lucide-react';
+import { Copy, Crown, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
@@ -20,10 +20,16 @@ export function GameRoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const checkAuth = useAuthStore((s) => s.checkAuth);
+
+  useEffect(() => {
+    void checkAuth();
+  }, [checkAuth]);
   const { currentRoom, joinRoom, leaveRoom, addAi, startGame, sendChat, chatMessages, appendChat, patchCurrentRoom } =
     useLobbyStore();
   const [chatInput, setChatInput] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useSocket(true);
 
@@ -112,20 +118,34 @@ export function GameRoomPage() {
           <div>
             <h1 className="font-display text-3xl text-gradient-gold">{room.name}</h1>
             <p className="font-body text-gold/70">
-              {room.players.length} / {max} giocatori · Host:{' '}
-              {room.players.find((p) => p.id === room.hostId)?.name ?? '—'}
+              {room.players.length} / {max} giocatori
             </p>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              void leaveRoom(room.id);
-              navigate('/lobby');
-            }}
-          >
-            Esci
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded px-3 py-1.5 text-xs text-gold/60 transition hover:bg-gold/10 hover:text-gold"
+              title="Copia link stanza"
+              onClick={() => {
+                void navigator.clipboard.writeText(`${window.location.origin}/room/${room.id}`);
+                setLinkCopied(true);
+                setTimeout(() => setLinkCopied(false), 2000);
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              {linkCopied ? 'Copiato!' : 'Condividi'}
+            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                void leaveRoom(room.id);
+                navigate('/lobby');
+              }}
+            >
+              Esci
+            </Button>
+          </div>
         </div>
 
         <GlassPanel className="felt-table felt-noise relative overflow-hidden p-8 md:p-12">
@@ -152,20 +172,29 @@ export function GameRoomPage() {
                   >
                     {p ? (
                       <>
-                        <p className="font-display text-sm text-ivory">{p.name}</p>
-                        <p className="text-xs text-gold/60">{p.type}</p>
+                        <div className="flex items-center justify-center gap-1">
+                          {p.id === room.hostId && (
+                            <Crown className="h-3.5 w-3.5 text-gold" aria-label="Host" />
+                          )}
+                          <p className="font-display text-sm text-ivory">{p.name}</p>
+                        </div>
+                        <p className="text-xs text-gold/60">
+                          {p.type === OG.PlayerType.AI ? 'Bot' : p.type === OG.PlayerType.HUMAN ? 'Giocatore' : p.type}
+                        </p>
                       </>
                     ) : (
                       <>
                         <p className="font-body text-sm text-gold/50">Posto libero</p>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="mt-2 w-full text-xs"
-                          onClick={() => addAi(room.id, i)}
-                        >
-                          Aggiungi Bot
-                        </Button>
+                        {isHost && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="mt-2 w-full text-xs"
+                            onClick={() => addAi(room.id, i)}
+                          >
+                            Aggiungi Bot
+                          </Button>
+                        )}
                       </>
                     )}
                   </div>

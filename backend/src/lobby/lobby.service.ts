@@ -78,18 +78,24 @@ export class LobbyService {
     return room;
   }
 
-  listRooms(): RoomListItem[] {
-    return [...this.rooms.values()].map((r) => ({
-      id: r.id,
-      name: r.name,
-      gameType: r.config.gameType,
-      currentPlayers: r.players.length,
-      maxPlayers: r.maxPlayers,
-      status: r.status,
-      hostName: r.players.find((p) => p.id === r.hostId)?.name ?? 'Host',
-      isPrivate: r.isPrivate,
-      modeId: String(r.config.options['modeId'] ?? ''),
-    }));
+  listAllRooms(): LobbyRoom[] {
+    return [...this.rooms.values()];
+  }
+
+  listRooms(includePrivate = false): RoomListItem[] {
+    return [...this.rooms.values()]
+      .filter((r) => includePrivate || !r.isPrivate)
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        gameType: r.config.gameType,
+        currentPlayers: r.players.length,
+        maxPlayers: r.maxPlayers,
+        status: r.status,
+        hostName: r.players.find((p) => p.id === r.hostId)?.name ?? 'Host',
+        isPrivate: r.isPrivate,
+        modeId: String(r.config.options['modeId'] ?? ''),
+      }));
   }
 
   getRoom(roomId: string): LobbyRoom {

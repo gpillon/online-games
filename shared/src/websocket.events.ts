@@ -32,6 +32,9 @@ export const WS_EVENTS = {
   GAME_PLAYER_RECONNECTED: 'game:player_reconnected',
   GAME_REQUEST_STATE: 'game:request_state',
 
+  // Spectator
+  ROOM_SPECTATE: 'room:spectate',
+
   // Errors
   ERROR: 'error',
 } as const;
