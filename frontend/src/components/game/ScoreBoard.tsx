@@ -1,6 +1,15 @@
 import { motion } from 'framer-motion';
 import { GlassPanel } from '@/components/ui/Card';
 
+function formatScore(n: number): string {
+  const third = n % 1;
+  const whole = Math.floor(n);
+  if (Math.abs(third) < 0.01) return String(whole);
+  if (Math.abs(third - 1 / 3) < 0.01) return `${whole}⅓`;
+  if (Math.abs(third - 2 / 3) < 0.01) return `${whole}⅔`;
+  return n.toFixed(1);
+}
+
 export interface ScoreBoardProps {
   teamA: number;
   teamB: number;
@@ -21,7 +30,7 @@ export function ScoreBoard({ teamA, teamB, roundLabel, handLabel, targetScore }:
             animate={{ scale: 1, color: '#faf3e0' }}
             className="font-display text-3xl text-ivory"
           >
-            {teamA}
+            {formatScore(teamA)}
           </motion.p>
         </div>
         <div className="text-center font-body text-sm text-gold/80">
@@ -37,7 +46,7 @@ export function ScoreBoard({ teamA, teamB, roundLabel, handLabel, targetScore }:
             animate={{ scale: 1, color: '#faf3e0' }}
             className="font-display text-3xl text-ivory"
           >
-            {teamB}
+            {formatScore(teamB)}
           </motion.p>
         </div>
       </div>
