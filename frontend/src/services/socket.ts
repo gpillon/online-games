@@ -16,7 +16,7 @@ export function connectSocket(token?: string | null): Socket {
   }
   socket = io({
     path: '/socket.io',
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'],
     auth: token ? { token } : {},
     autoConnect: true,
   });
