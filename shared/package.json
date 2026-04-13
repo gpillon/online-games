@@ -1,11 +1,19 @@
 {
   "name": "@online-games/shared",
   "version": "1.0.0",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/cjs/index.d.ts"
+    }
+  },
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc --watch"
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
+    "watch": "tsc -p tsconfig.cjs.json --watch"
   },
   "devDependencies": {
     "typescript": "^5.4.0"
