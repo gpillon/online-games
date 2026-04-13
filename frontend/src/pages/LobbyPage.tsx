@@ -21,7 +21,7 @@ const games: { id: string; type?: OG.GameType; label: string; active: boolean }[
 export function LobbyPage() {
   const navigate = useNavigate();
   const { rooms, fetchRooms, subscribeLobby, unsubscribeLobby, createRoom, loading, error } = useLobbyStore();
-  const { user, token, loginAnonymous } = useAuthStore();
+  const { token, loginAnonymous } = useAuthStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [roomName, setRoomName] = useState('Sala privata');
   const [autoLoginDone, setAutoLoginDone] = useState(!!token);
