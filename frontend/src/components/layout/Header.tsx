@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/stores/authStore';
 import { motion } from 'framer-motion';
-import { Crown, LogOut, Menu, Sparkles, User } from 'lucide-react';
+import { Crown, LogOut, Menu, Shield, Sparkles, User } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 
@@ -47,6 +47,18 @@ export function Header() {
           ))}
           {user ? (
             <>
+              {user.role === 'admin' && (
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) =>
+                    `ml-2 inline-flex items-center gap-1 rounded-md px-3 py-2 font-display text-sm
+                  ${isActive ? 'bg-gold/15 text-gold' : 'text-amber-400/90 hover:bg-gold/10 hover:text-gold'}`
+                  }
+                >
+                  <Shield className="h-4 w-4" />
+                  Admin
+                </NavLink>
+              )}
               <NavLink
                 to="/profile"
                 className={({ isActive }) =>
@@ -134,9 +146,16 @@ export function Header() {
               </>
             )}
             {user && (
-              <NavLink to="/profile" className="rounded-md px-3 py-2 text-ivory" onClick={() => setOpen(false)}>
-                Profilo
-              </NavLink>
+              <>
+                {user.role === 'admin' && (
+                  <NavLink to="/admin" className="rounded-md px-3 py-2 text-amber-400" onClick={() => setOpen(false)}>
+                    Admin
+                  </NavLink>
+                )}
+                <NavLink to="/profile" className="rounded-md px-3 py-2 text-ivory" onClick={() => setOpen(false)}>
+                  Profilo
+                </NavLink>
+              </>
             )}
           </div>
         </motion.div>

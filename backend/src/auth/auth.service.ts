@@ -48,11 +48,17 @@ export class AuthService {
   }
 
   async validateCredentials(
-    email: string,
+    emailOrUsername: string,
     password: string,
   ): Promise<UserEntity | null> {
-    const user = await this.usersService.findByEmail(email);
+    let user = await this.usersService.findByEmail(emailOrUsername);
+    if (!user) {
+      user = await this.usersService.findByUsername(emailOrUsername);
+    }
     if (!user || !user.passwordHash) return null;
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Account is blocked');
+    }
     const ok = await bcrypt.compare(password, user.passwordHash);
     return ok ? user : null;
   }

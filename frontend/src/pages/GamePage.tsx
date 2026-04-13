@@ -1,18 +1,28 @@
 import type { TrickCard } from '@online-games/shared';
 import * as OG from '@online-games/shared';
+import { X } from 'lucide-react';
 import { useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CardComponent } from '@/components/game/CardComponent';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { getGameEntry } from '@/games/registry';
 import { useSocket } from '@/hooks/useSocket';
+import { WS_EVENTS } from '@/lib/wsEvents';
+import { getSocket } from '@/services/socket';
+import { useAuthStore } from '@/stores/authStore';
 import { useGameStore } from '@/stores/gameStore';
+import { useLobbyStore } from '@/stores/lobbyStore';
 
 export function GamePage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const gameId = id ?? '';
   useSocket(true);
+
+  const user = useAuthStore((s) => s.user);
+  const currentRoom = useLobbyStore((s) => s.currentRoom);
+  const isHost = !!user && user.id === currentRoom?.hostId;
 
   const client = useGameStore((s) => s.clientState);
   const gameType = useGameStore((s) => s.gameType) ?? OG.GameType.TRESSETTE;
@@ -56,6 +66,19 @@ export function GamePage() {
                 Sala giochi
               </Button>
             </Link>
+            {isHost && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-xs text-red-400 hover:text-red-300"
+                onClick={() => {
+                  getSocket()?.emit(WS_EVENTS.ROOM_CLOSE, { roomId: currentRoom!.id });
+                  navigate('/lobby');
+                }}
+              >
+                <X className="mr-1 h-3 w-3" /> Chiudi partita
+              </Button>
+            )}
           </div>
         </div>
 

@@ -12,5 +12,6 @@ import { LobbyService } from './lobby.service';
   imports: [GamesModule, UsersModule, AuthModule, ConfigModule],
   controllers: [LobbyController],
   providers: [LobbyService, LobbyGateway, LobbyPersistenceService],
+  exports: [LobbyService],
 })
 export class LobbyModule {}

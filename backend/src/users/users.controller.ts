@@ -1,8 +1,12 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserEntity } from './entities/user.entity';
+import { HeadToHeadEntity } from './entities/head-to-head.entity';
+import { HeadToHeadRecordDto } from './dto/head-to-head-record.dto';
+import { LeaderboardQueryDto } from './dto/leaderboard-query.dto';
+import { UserStatsParamDto } from './dto/user-stats-param.dto';
 import { UsersService } from './users.service';
 
 @ApiTags('users')
@@ -19,12 +23,40 @@ export class UsersController {
   }
 
   @Get('leaderboard')
-  async leaderboard() {
-    return this.usersService.getLeaderboard(100);
+  @ApiOkResponse({ description: 'Leaderboard entries' })
+  async leaderboard(@Query() query: LeaderboardQueryDto) {
+    const limit = query.limit ?? 100;
+    return this.usersService.getLeaderboard(limit);
   }
 
   @Get('stats/:userId')
-  async stats(@Param('userId') userId: string) {
-    return this.usersService.getStatsForUser(userId);
+  @ApiOkResponse({ description: 'User stats by id' })
+  async stats(@Param() params: UserStatsParamDto) {
+    return this.usersService.getStatsForUser(params.userId);
+  }
+
+  @Get('head-to-head')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: [HeadToHeadRecordDto] })
+  async headToHead(@CurrentUser() user: UserEntity): Promise<HeadToHeadRecordDto[]> {
+    const rows = await this.usersService.getHeadToHead(user.id);
+    return rows.map((row) => this.toHeadToHeadRecordDto(row));
+  }
+
+  private toHeadToHeadRecordDto(row: HeadToHeadEntity): HeadToHeadRecordDto {
+    return {
+      id: row.id,
+      userId: row.userId,
+      opponentId: row.opponentId,
+      gameType: row.gameType,
+      wins: row.wins,
+      losses: row.losses,
+      opponent: {
+        id: row.opponent.id,
+        username: row.opponent.username,
+        avatarUrl: row.opponent.avatarUrl ?? undefined,
+      },
+    };
   }
 }

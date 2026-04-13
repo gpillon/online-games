@@ -1,3 +1,5 @@
+export type UserRole = 'user' | 'admin';
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -5,7 +7,21 @@ export interface UserProfile {
   isAnonymous: boolean;
   avatarUrl?: string;
   createdAt: string;
+  role: UserRole;
+  isBlocked: boolean;
   stats: UserStats;
+}
+
+export interface AdminUserView {
+  id: string;
+  username: string;
+  email?: string;
+  role: UserRole;
+  isBlocked: boolean;
+  isAnonymous: boolean;
+  isEmailVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UserStats {

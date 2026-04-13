@@ -173,18 +173,33 @@ export class LobbyGateway
     );
     await client.join(`room:${room.id}`);
     client.data.roomId = room.id;
-    this.lobbyService.markPlayerConnection(room.id, userId, true);
-    this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_PLAYER_JOINED, {
-      userId,
-      username,
-    });
-    this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_UPDATE, room);
-    this.server.to(`room:${room.id}`).emit(WS_EVENTS.GAME_PLAYER_RECONNECTED, {
-      userId,
-      connected: true,
-    });
-    if (room.gameId) {
-      void this.emitGameState(room.id, room.gameId);
+    const isPlayer = room.players.some((p) => p.id === userId);
+    if (isPlayer) {
+      this.lobbyService.markPlayerConnection(room.id, userId, true);
+      this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_PLAYER_JOINED, {
+        userId,
+        username,
+      });
+      this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_UPDATE, room);
+      this.server.to(`room:${room.id}`).emit(WS_EVENTS.GAME_PLAYER_RECONNECTED, {
+        userId,
+        connected: true,
+      });
+      if (room.gameId) {
+        void this.emitGameState(room.id, room.gameId);
+      }
+    } else {
+      client.data.spectator = true;
+      client.emit(WS_EVENTS.ROOM_UPDATE, room);
+      if (room.gameId) {
+        const engine = this.gamesService.tryGetEngine(room.gameId);
+        if (engine) {
+          client.emit(
+            WS_EVENTS.GAME_STATE,
+            engine.getSpectatorState?.() ?? engine.getClientState('__spectator'),
+          );
+        }
+      }
     }
     this.emitRoomsUpdate();
     return { room };
@@ -251,17 +266,25 @@ export class LobbyGateway
     const userId = client.data.userId as string;
     const room = this.lobbyService.findRoomByGameId(body.gameId);
     if (!room) throw new WsException('Game room not found');
-    if (!room.players.some((p) => p.id === userId)) {
-      throw new WsException('Not a player in this game');
-    }
     const engine = this.gamesService.tryGetEngine(body.gameId);
     if (!engine) throw new WsException('Game not found');
-    if (!client.data.roomId) {
-      client.data.roomId = room.id;
+    const isPlayer = room.players.some((p) => p.id === userId);
+    if (isPlayer) {
+      if (!client.data.roomId) {
+        client.data.roomId = room.id;
+        void client.join(`room:${room.id}`);
+        this.lobbyService.markPlayerConnection(room.id, userId, true);
+      }
+      client.emit(WS_EVENTS.GAME_STATE, engine.getClientState(userId));
+    } else {
       void client.join(`room:${room.id}`);
-      this.lobbyService.markPlayerConnection(room.id, userId, true);
+      client.data.roomId = room.id;
+      client.data.spectator = true;
+      client.emit(
+        WS_EVENTS.GAME_STATE,
+        engine.getSpectatorState?.() ?? engine.getClientState('__spectator'),
+      );
     }
-    client.emit(WS_EVENTS.GAME_STATE, engine.getClientState(userId));
     return { ok: true };
   }
 
@@ -530,6 +553,8 @@ export class LobbyGateway
       room.config.gameType === GameType.TRESSETTE
         ? 'tressette'
         : String(room.config.gameType);
+    const winnerHumanIds: string[] = [];
+    const loserHumanIds: string[] = [];
     for (const p of results.players) {
       const roomPlayer = room.players.find((x) => x.id === p.id);
       if (!roomPlayer || roomPlayer.type === PlayerType.AI) continue;
@@ -537,6 +562,10 @@ export class LobbyGateway
       if (!dbUser) continue;
       const team = p.team ?? 0;
       const won = team === results.winningTeam;
+      if (roomPlayer.type === PlayerType.HUMAN) {
+        if (won) winnerHumanIds.push(p.id);
+        else loserHumanIds.push(p.id);
+      }
       const teammates = results.players.filter((x) => (x.team ?? 0) === team);
       const pointsShare =
         results.teamScores[team] / Math.max(1, teammates.length);
@@ -547,6 +576,11 @@ export class LobbyGateway
         won,
         gameId: room.gameId ?? room.id,
       });
+    }
+    for (const w of winnerHumanIds) {
+      for (const l of loserHumanIds) {
+        await this.usersService.recordHeadToHead(w, l, gameType);
+      }
     }
   }
 }

@@ -13,17 +13,30 @@ function formatScore(n: number): string {
 export interface ScoreBoardProps {
   teamA: number;
   teamB: number;
+  teamANames?: string[];
+  teamBNames?: string[];
   roundLabel: string;
   handLabel: string;
   targetScore: number;
 }
 
-export function ScoreBoard({ teamA, teamB, roundLabel, handLabel, targetScore }: ScoreBoardProps) {
+export function ScoreBoard({
+  teamA,
+  teamB,
+  teamANames,
+  teamBNames,
+  roundLabel,
+  handLabel,
+  targetScore,
+}: ScoreBoardProps) {
   return (
     <GlassPanel className="px-4 py-3">
       <div className="flex items-center justify-between gap-6">
         <div>
           <p className="font-display text-xs uppercase tracking-[0.2em] text-gold/70">Squadra A</p>
+          {!!teamANames?.length && (
+            <p className="font-body text-xs text-gold/50">{teamANames.join(' · ')}</p>
+          )}
           <motion.p
             key={teamA}
             initial={{ scale: 1.15, color: '#f0d060' }}
@@ -40,6 +53,9 @@ export function ScoreBoard({ teamA, teamB, roundLabel, handLabel, targetScore }:
         </div>
         <div className="text-right">
           <p className="font-display text-xs uppercase tracking-[0.2em] text-gold/70">Squadra B</p>
+          {!!teamBNames?.length && (
+            <p className="font-body text-xs text-gold/50">{teamBNames.join(' · ')}</p>
+          )}
           <motion.p
             key={teamB}
             initial={{ scale: 1.15, color: '#f0d060' }}

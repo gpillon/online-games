@@ -8,6 +8,11 @@ import {
 } from 'typeorm';
 import { GameScoreEntity } from './game-score.entity';
 
+export enum UserRole {
+  USER = 'user',
+  ADMIN = 'admin',
+}
+
 @Entity('users')
 export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -33,6 +38,12 @@ export class UserEntity {
 
   @Column({ name: 'avatar_url', type: 'varchar', nullable: true })
   avatarUrl!: string | null;
+
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
+  role!: UserRole;
+
+  @Column({ name: 'is_blocked', default: false })
+  isBlocked!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

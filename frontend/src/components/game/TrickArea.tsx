@@ -6,6 +6,7 @@ export interface TrickAreaProps {
   trick: TrickCard[];
   mySeatIndex: number;
   numPlayers: number;
+  trickWinnerSeat?: number;
 }
 
 function slotAngle(seat: number, mySeat: number, numPlayers: number): number {
@@ -21,8 +22,13 @@ function slotAngle(seat: number, mySeat: number, numPlayers: number): number {
   return m4[rel] ?? 0;
 }
 
-export function TrickArea({ trick, mySeatIndex, numPlayers }: TrickAreaProps) {
+export function TrickArea({ trick, mySeatIndex, numPlayers, trickWinnerSeat }: TrickAreaProps) {
   const n = Math.max(numPlayers, 2);
+  const winnerAngle =
+    trickWinnerSeat !== undefined ? slotAngle(trickWinnerSeat, mySeatIndex, Math.max(n, 4)) : 0;
+  const winRad = (winnerAngle * Math.PI) / 180;
+  const exitX = Math.sin(winRad) * 200;
+  const exitY = -Math.cos(winRad) * 120;
 
   return (
     <div className="relative flex min-h-[140px] items-center justify-center">
@@ -39,7 +45,7 @@ export function TrickArea({ trick, mySeatIndex, numPlayers }: TrickAreaProps) {
               className="absolute"
               initial={{ opacity: 0, scale: 0.5, x: x * 1.8, y: y * 1.8 + 40 }}
               animate={{ opacity: 1, scale: 1, x, y }}
-              exit={{ opacity: 0, scale: 0.4, y: y - 24 }}
+              exit={{ opacity: 0, scale: 0.6, x: exitX, y: exitY }}
               transition={{ type: 'spring', stiffness: 380, damping: 26, delay: i * 0.05 }}
             >
               <CardComponent card={t.card} layoutId={`trick-${t.card.id}`} className="scale-90" />

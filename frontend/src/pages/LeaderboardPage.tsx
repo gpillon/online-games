@@ -10,7 +10,7 @@ export function LeaderboardPage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    void apiFetch<LeaderboardEntry[]>('/leaderboard')
+    void apiFetch<LeaderboardEntry[]>('/users/leaderboard')
       .then(setRows)
       .catch(() => setErr('Classifica non disponibile al momento.'));
   }, []);
@@ -34,6 +34,7 @@ export function LeaderboardPage() {
               <th className="px-4 py-3">#</th>
               <th className="px-4 py-3">Giocatore</th>
               <th className="px-4 py-3 text-right">Punti</th>
+              <th className="hidden px-4 py-3 text-right md:table-cell">Partite</th>
               <th className="hidden px-4 py-3 text-right md:table-cell">Vinte</th>
               <th className="hidden px-4 py-3 text-right md:table-cell">%</th>
             </tr>
@@ -41,7 +42,7 @@ export function LeaderboardPage() {
           <tbody>
             {rows.length === 0 && !err ? (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-gold/60">
+                <td colSpan={6} className="px-4 py-10 text-center text-gold/60">
                   Nessun dato ancora — sii il primo a giocare.
                 </td>
               </tr>
@@ -63,6 +64,7 @@ export function LeaderboardPage() {
                   </td>
                   <td className="px-4 py-3 text-ivory">{r.username}</td>
                   <td className="px-4 py-3 text-right text-gold">{r.totalPoints}</td>
+                  <td className="hidden px-4 py-3 text-right text-gold/80 md:table-cell">{r.gamesPlayed}</td>
                   <td className="hidden px-4 py-3 text-right text-gold/80 md:table-cell">{r.gamesWon}</td>
                   <td className="hidden px-4 py-3 text-right text-gold/70 md:table-cell">
                     {((r.winRate <= 1 ? r.winRate * 100 : r.winRate) as number).toFixed(0)}%

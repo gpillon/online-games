@@ -174,11 +174,11 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
     password?: string,
   ): LobbyRoom {
     const room = this.getRoom(roomId);
-    if (room.status !== GameStatus.WAITING) {
-      throw new BadRequestException('Game already started');
-    }
     if (room.players.some((p) => p.id === userId)) {
       room.lastHumanActivity = new Date().toISOString();
+      return room;
+    }
+    if (room.status !== GameStatus.WAITING) {
       return room;
     }
     if (room.players.length >= room.maxPlayers) {

@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
+import { AdminPage } from '@/pages/AdminPage';
 import { GameRoomPage } from '@/pages/GameRoomPage';
 import { GamePage } from '@/pages/GamePage';
 import { HomePage } from '@/pages/HomePage';
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
     </Routes>
   );

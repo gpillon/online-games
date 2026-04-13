@@ -34,7 +34,11 @@ export class OptionalAuthGuard implements CanActivate {
         secret: this.config.getOrThrow<string>('JWT_SECRET'),
       });
       const user = await this.usersService.findById(payload.sub);
-      req.user = user ?? undefined;
+      if (!user || user.isBlocked) {
+        req.user = undefined;
+      } else {
+        req.user = user;
+      }
     } catch {
       req.user = undefined;
     }
