@@ -5,11 +5,11 @@ replicaCount:
 image:
   frontend:
     repository: ghcr.io/gpillon/online-games-frontend
-    tag: "5efd781"
+    tag: "37a40b2"
     pullPolicy: IfNotPresent
   backend:
     repository: ghcr.io/gpillon/online-games-backend
-    tag: "5efd781"
+    tag: "37a40b2"
     pullPolicy: IfNotPresent
 
 service:
@@ -28,6 +28,9 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
   host: carte.the.magesgate.com
   tls:
     enabled: true
