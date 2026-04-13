@@ -5,11 +5,11 @@ replicaCount:
 image:
   frontend:
     repository: ghcr.io/gpillon/online-games-frontend
-    tag: "37a40b2"
+    tag: "0d14d4c"
     pullPolicy: IfNotPresent
   backend:
     repository: ghcr.io/gpillon/online-games-backend
-    tag: "37a40b2"
+    tag: "0d14d4c"
     pullPolicy: IfNotPresent
 
 service:
