@@ -27,5 +27,6 @@ export const WS_EVENTS = {
   GAME_ERROR: 'game:error',
   GAME_DECLARATION: 'game:declaration',
   GAME_PLAYER_RECONNECTED: 'game:player_reconnected',
+  GAME_REQUEST_STATE: 'game:request_state',
   ERROR: 'error',
 } as const;

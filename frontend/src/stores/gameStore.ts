@@ -117,6 +117,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     set({ gameId, gameType });
 
+    if (!get().clientState) {
+      s.emit(WS_EVENTS.GAME_REQUEST_STATE, { gameId });
+    }
+
     return () => {
       s.off(WS_EVENTS.GAME_STATE, onState);
       s.off(WS_EVENTS.GAME_TRICK_COMPLETE, onTrickComplete);

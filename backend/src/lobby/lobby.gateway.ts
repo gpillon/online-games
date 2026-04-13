@@ -199,6 +199,22 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { gameId };
   }
 
+  @SubscribeMessage(WS_EVENTS.GAME_REQUEST_STATE)
+  async handleRequestGameState(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { gameId: string },
+  ) {
+    const userId = client.data.userId as string;
+    const roomId = client.data.roomId as string | undefined;
+    if (!roomId) throw new WsException('Not in a room');
+    const room = this.lobbyService.getRoom(roomId);
+    if (room.gameId !== body.gameId) throw new WsException('Game mismatch');
+    const engine = this.gamesService.tryGetEngine(body.gameId);
+    if (!engine) throw new WsException('Game not found');
+    client.emit(WS_EVENTS.GAME_STATE, engine.getClientState(userId));
+    return { ok: true };
+  }
+
   @SubscribeMessage(WS_EVENTS.GAME_MOVE)
   async handleGameMove(
     @ConnectedSocket() client: Socket,

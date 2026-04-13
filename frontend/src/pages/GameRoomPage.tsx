@@ -1,4 +1,4 @@
-import type { ChatMessage, GameRoom } from '@online-games/shared';
+import type { ChatMessage, GameRoom, TressetteClientState } from '@online-games/shared';
 import * as OG from '@online-games/shared';
 import { WS_EVENTS } from '@/lib/wsEvents';
 import { motion } from 'framer-motion';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { useSocket } from '@/hooks/useSocket';
 import { getSocket } from '@/services/socket';
 import { useAuthStore } from '@/stores/authStore';
+import { useGameStore } from '@/stores/gameStore';
 import { useLobbyStore } from '@/stores/lobbyStore';
 
 type RoomExt = GameRoom & { activeGameId?: string };
@@ -50,7 +51,16 @@ export function GameRoomPage() {
       }
     };
     const onChat = (msg: ChatMessage) => appendChat(msg);
-    const onGameState = (payload: { gameId: string }) => {
+    const onGameState = (payload: TressetteClientState & { gameId: string; validCardIds?: string[] }) => {
+      const { validCardIds, ...rest } = payload;
+      useGameStore.getState().clearGame();
+      useGameStore.setState({
+        gameId: rest.gameId,
+        gameType: OG.GameType.TRESSETTE,
+        clientState: rest,
+        validCardIds: validCardIds ?? null,
+        error: null,
+      });
       navigate(`/game/${payload.gameId}`);
     };
     s.on(WS_EVENTS.ROOM_UPDATE, onRoom);
