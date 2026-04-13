@@ -11,8 +11,12 @@ async function bootstrap() {
   const port = parseInt(config.get<string>('PORT') ?? '3001', 10);
   const frontendUrl = config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
 
+  app.setGlobalPrefix('api', {
+    exclude: ['/'],
+  });
+
   app.enableCors({
-    origin: frontendUrl,
+    origin: [frontendUrl, 'http://localhost:5173', 'http://localhost:8080'],
     credentials: true,
   });
 
@@ -32,7 +36,7 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(port);
 }

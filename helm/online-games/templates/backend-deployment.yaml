@@ -45,14 +45,14 @@ spec:
                 name: {{ include "online-games.fullname" . }}-backend-secrets
           livenessProbe:
             httpGet:
-              path: /api
+              path: /api/docs
               port: 3001
             initialDelaySeconds: 60
             periodSeconds: 15
             failureThreshold: 10
           readinessProbe:
             httpGet:
-              path: /api
+              path: /api/docs
               port: 3001
             initialDelaySeconds: 15
             periodSeconds: 10
