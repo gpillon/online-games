@@ -1,0 +1,13 @@
+apiVersion: v2
+name: online-games
+description: Arena di Carte - Online card games platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - games
+  - cards
+  - tressette
+  - italian
+maintainers:
+  - name: online-games-team

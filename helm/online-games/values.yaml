@@ -1,0 +1,82 @@
+replicaCount:
+  frontend: 2
+  backend: 2
+
+image:
+  frontend:
+    repository: ghcr.io/OWNER/online-games-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  backend:
+    repository: ghcr.io/OWNER/online-games-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+service:
+  frontend:
+    type: ClusterIP
+    port: 80
+  backend:
+    type: ClusterIP
+    port: 3001
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  host: games.example.com
+  tls:
+    enabled: false
+    secretName: online-games-tls
+
+backend:
+  env:
+    DB_HOST: "online-games-postgresql"
+    DB_PORT: "5432"
+    DB_NAME: "online_games"
+    DB_USER: "postgres"
+    JWT_EXPIRATION: "7d"
+    TYPEORM_SYNC: "false"
+  secrets:
+    DB_PASSWORD: ""
+    JWT_SECRET: ""
+    SMTP_HOST: ""
+    SMTP_PORT: "587"
+    SMTP_USER: ""
+    SMTP_PASS: ""
+    SMTP_FROM: ""
+
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: ""
+    database: online_games
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+
+resources:
+  frontend:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  backend:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80

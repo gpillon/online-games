@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "online-games.fullname" . }}-frontend
+  labels:
+    {{- include "online-games.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: {{ .Values.service.frontend.type }}
+  ports:
+    - port: {{ .Values.service.frontend.port }}
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "online-games.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
