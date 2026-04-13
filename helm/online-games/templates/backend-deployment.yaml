@@ -29,8 +29,17 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+            {{- if not (index .Values.backend.env "FRONTEND_URL") }}
             - name: FRONTEND_URL
               value: "https://{{ .Values.ingress.host }}"
+            {{- end }}
+            {{- if .Values.backend.cnpgSecretName }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.cnpgSecretName }}
+                  key: password
+            {{- end }}
           envFrom:
             - secretRef:
                 name: {{ include "online-games.fullname" . }}-backend-secrets
