@@ -36,6 +36,20 @@ export class GamesService {
     this.engines.delete(gameId);
   }
 
+  getAllEngines(): Map<string, IGameEngine> {
+    return new Map(this.engines);
+  }
+
+  restoreEngine(gameId: string, state: unknown): IGameEngine {
+    const rec = state as { gameType?: GameType };
+    if (rec.gameType !== GameType.TRESSETTE) {
+      throw new NotFoundException('Unsupported persisted game type');
+    }
+    const engine = TressetteEngine.fromState(gameId, state);
+    this.engines.set(gameId, engine);
+    return engine;
+  }
+
   createEngineForType(
     gameType: GameType,
     gameId: string,

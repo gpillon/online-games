@@ -77,6 +77,114 @@ export class TressetteEngine implements IGameEngine {
     this.targetScore = options.targetScore ?? 21;
   }
 
+  /** Full server snapshot for persistence (includes fields not exposed via getState). */
+  getPersistenceState(): Record<string, unknown> {
+    return {
+      gameType: GameType.TRESSETTE,
+      gameId: this.gameId,
+      mode: this.mode,
+      targetScore: this.targetScore,
+      players: this.players.map((p) => ({ ...p })),
+      status: this.status,
+      hands: { ...this.hands },
+      stock: [...this.stock],
+      mortoCard: this.mortoCard,
+      currentTrick: this.currentTrick.map((t) => ({ ...t, card: { ...t.card } })),
+      lastTrick: this.lastTrick?.map((t) => ({ ...t, card: { ...t.card } })),
+      tricksWon: Object.fromEntries(
+        Object.entries(this.tricksWon).map(([k, stacks]) => [
+          k,
+          stacks.map((stack) => stack.map((c) => ({ ...c }))),
+        ]),
+      ),
+      teamScores: [...this.teamScores] as [number, number],
+      declarations: this.declarations.map((d) => ({
+        ...d,
+        cards: d.cards.map((c) => ({ ...c })),
+      })),
+      dealerSeat: this.dealerSeat,
+      currentSeat: this.currentSeat,
+      handNumber: this.handNumber,
+      trickInHand: this.trickInHand,
+      hasPlayedCardThisHand: { ...this.hasPlayedCardThisHand },
+      declaredPlayers: [...this.declaredPlayers],
+      lastTrickWinnerPlayerId: this.lastTrickWinnerPlayerId,
+      createdAt: this.createdAt,
+    };
+  }
+
+  static fromState(gameId: string, state: unknown): TressetteEngine {
+    if (!state || typeof state !== 'object') {
+      throw new Error('Invalid Tressette engine state');
+    }
+    const s = state as Record<string, unknown>;
+    const mode = s.mode as TressetteMode;
+    const targetScore = typeof s.targetScore === 'number' ? s.targetScore : 21;
+    const engine = new TressetteEngine(gameId, { mode, targetScore });
+    engine.hydrateFromPersistence(s);
+    return engine;
+  }
+
+  private hydrateFromPersistence(s: Record<string, unknown>): void {
+    if (Array.isArray(s.players)) {
+      this.players = (s.players as GamePlayer[]).map((p) => ({ ...p }));
+    }
+    if (typeof s.status === 'string') {
+      this.status = s.status as GameStatus;
+    }
+    if (s.hands && typeof s.hands === 'object') {
+      this.hands = { ...(s.hands as Record<string, Card[]>) };
+    }
+    if (Array.isArray(s.stock)) {
+      this.stock = [...(s.stock as Card[])];
+    }
+    if (s.mortoCard === null || (s.mortoCard && typeof s.mortoCard === 'object')) {
+      this.mortoCard = s.mortoCard as Card | null;
+    }
+    if (Array.isArray(s.currentTrick)) {
+      this.currentTrick = [...(s.currentTrick as TrickCard[])];
+    }
+    if (s.lastTrick === undefined) {
+      this.lastTrick = undefined;
+    } else if (Array.isArray(s.lastTrick)) {
+      this.lastTrick = [...(s.lastTrick as TrickCard[])];
+    }
+    if (s.tricksWon && typeof s.tricksWon === 'object') {
+      const tw: Record<string, Card[][]> = {};
+      for (const [pid, stacks] of Object.entries(s.tricksWon as Record<string, Card[][]>)) {
+        tw[pid] = Array.isArray(stacks)
+          ? stacks.map((stack) => (Array.isArray(stack) ? [...stack] : []))
+          : [];
+      }
+      this.tricksWon = tw;
+    }
+    if (Array.isArray(s.teamScores) && s.teamScores.length === 2) {
+      this.teamScores = [Number(s.teamScores[0]), Number(s.teamScores[1])];
+    }
+    if (Array.isArray(s.declarations)) {
+      this.declarations = (s.declarations as TressetteDeclaration[]).map((d) => ({
+        ...d,
+        cards: Array.isArray(d.cards) ? [...d.cards] : [],
+      }));
+    }
+    if (typeof s.dealerSeat === 'number') this.dealerSeat = s.dealerSeat;
+    if (typeof s.currentSeat === 'number') this.currentSeat = s.currentSeat;
+    if (typeof s.handNumber === 'number') this.handNumber = s.handNumber;
+    if (typeof s.trickInHand === 'number') this.trickInHand = s.trickInHand;
+    if (s.hasPlayedCardThisHand && typeof s.hasPlayedCardThisHand === 'object') {
+      this.hasPlayedCardThisHand = { ...(s.hasPlayedCardThisHand as Record<string, boolean>) };
+    }
+    if (Array.isArray(s.declaredPlayers)) {
+      this.declaredPlayers = new Set(s.declaredPlayers as string[]);
+    }
+    if (s.lastTrickWinnerPlayerId === null || typeof s.lastTrickWinnerPlayerId === 'string') {
+      this.lastTrickWinnerPlayerId = s.lastTrickWinnerPlayerId as string | null;
+    }
+    if (typeof s.createdAt === 'string') {
+      this.createdAt = s.createdAt;
+    }
+  }
+
   getGameId(): string {
     return this.gameId;
   }

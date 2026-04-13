@@ -5,8 +5,6 @@ import { create } from 'zustand';
 import { getSocket } from '@/services/socket';
 import { useAuthStore } from '@/stores/authStore';
 
-export type TablePhase = 'idle' | 'play' | 'trick_collect';
-
 interface GameState {
   gameId: string | null;
   gameType: OG.GameType | null;
@@ -14,12 +12,8 @@ interface GameState {
   error: string | null;
   /** Optional hints from server for playable cards */
   validCardIds: string[] | null;
-  tablePhase: TablePhase;
   lastTrickModalOpen: boolean;
-  trickCollectKey: number;
   setLastTrickModalOpen: (open: boolean) => void;
-  setTablePhase: (phase: TablePhase) => void;
-  bumpTrickCollect: () => void;
   bindGameEvents: (gameId: string, gameType?: OG.GameType) => () => void;
   playCard: (cardId: string) => void;
   sendDeclaration: (type: string, cardIds: string[]) => void;
@@ -32,15 +26,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   clientState: null,
   error: null,
   validCardIds: null,
-  tablePhase: 'idle',
   lastTrickModalOpen: false,
-  trickCollectKey: 0,
 
   setLastTrickModalOpen: (open) => set({ lastTrickModalOpen: open }),
-
-  setTablePhase: (phase) => set({ tablePhase: phase }),
-
-  bumpTrickCollect: () => set((s) => ({ trickCollectKey: s.trickCollectKey + 1 })),
 
   clearGame: () =>
     set({
@@ -49,7 +37,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       clientState: null,
       error: null,
       validCardIds: null,
-      tablePhase: 'idle',
       lastTrickModalOpen: false,
     }),
 
@@ -94,26 +81,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
     };
 
-    const onTrickComplete = (_payload: unknown) => {
-      set({ tablePhase: 'trick_collect' });
-      get().bumpTrickCollect();
-      window.setTimeout(() => {
-        set({ tablePhase: 'play' });
-      }, 900);
-    };
-
     const onError = (payload: { message?: string }) => {
       set({ error: payload.message ?? 'Errore di gioco' });
     };
 
-    const onOver = () => {
-      set({ tablePhase: 'idle' });
-    };
-
     s.on(WS_EVENTS.GAME_STATE, onState);
-    s.on(WS_EVENTS.GAME_TRICK_COMPLETE, onTrickComplete);
     s.on(WS_EVENTS.GAME_ERROR, onError);
-    s.on(WS_EVENTS.GAME_OVER, onOver);
 
     set({ gameId, gameType });
 
@@ -123,9 +96,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     return () => {
       s.off(WS_EVENTS.GAME_STATE, onState);
-      s.off(WS_EVENTS.GAME_TRICK_COMPLETE, onTrickComplete);
       s.off(WS_EVENTS.GAME_ERROR, onError);
-      s.off(WS_EVENTS.GAME_OVER, onOver);
     };
   },
 }));

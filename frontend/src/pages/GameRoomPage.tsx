@@ -49,11 +49,19 @@ export function GameRoomPage() {
   useEffect(() => {
     const s = getSocket();
     if (!s || !roomId) return;
-    const onRoom = (room: RoomExt) => {
-      if (room.id !== roomId) return;
-      patchCurrentRoom(room);
-      if (room.status === OG.GameStatus.IN_PROGRESS && room.activeGameId) {
-        navigate(`/game/${room.activeGameId}`);
+    const onRoom = (room: RoomExt | { id: string; closed: true }) => {
+      if ('closed' in room && room.closed) {
+        if (room.id === roomId) {
+          patchCurrentRoom(room);
+          navigate('/lobby');
+        }
+        return;
+      }
+      const r = room as RoomExt;
+      if (r.id !== roomId) return;
+      patchCurrentRoom(r);
+      if (r.status === OG.GameStatus.IN_PROGRESS && r.activeGameId) {
+        navigate(`/game/${r.activeGameId}`);
       }
     };
     const onChat = (msg: ChatMessage) => appendChat(msg);
@@ -135,6 +143,18 @@ export function GameRoomPage() {
               <Copy className="h-3.5 w-3.5" />
               {linkCopied ? 'Copiato!' : 'Condividi'}
             </button>
+            {isHost && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  getSocket()?.emit(WS_EVENTS.ROOM_CLOSE, { roomId: room.id });
+                  navigate('/lobby');
+                }}
+              >
+                Chiudi stanza
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"

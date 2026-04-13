@@ -23,7 +23,7 @@ interface LobbyState {
   spectateRoom: (roomId: string) => void;
   setCurrentRoom: (room: GameRoom | null) => void;
   appendChat: (msg: ChatMessage) => void;
-  patchCurrentRoom: (room: GameRoom) => void;
+  patchCurrentRoom: (room: GameRoom | { id: string; closed: true }) => void;
   reset: () => void;
 }
 
@@ -51,8 +51,14 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
   },
 
   patchCurrentRoom: (room) => {
+    if ('closed' in room && room.closed) {
+      if (get().currentRoom?.id === room.id) {
+        set({ currentRoom: null, chatMessages: [] });
+      }
+      return;
+    }
     if (get().currentRoom?.id === room.id) {
-      set({ currentRoom: room });
+      set({ currentRoom: room as GameRoom });
     }
   },
 

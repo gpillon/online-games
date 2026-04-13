@@ -2,7 +2,7 @@ import * as OG from '@online-games/shared';
 import { GameStatus, TressetteMode } from '@online-games/shared';
 import { motion } from 'framer-motion';
 import { Copy, Lock, Play, Users } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { GlassPanel } from '@/components/ui/Card';
@@ -38,6 +38,29 @@ function copyRoomLink(roomId: string) {
   void navigator.clipboard.writeText(url);
 }
 
+type PublicRoomSortField =
+  | 'name'
+  | 'hostName'
+  | 'currentPlayers'
+  | 'modeId'
+  | 'status'
+  | 'hasPassword';
+
+type SortDir = 'asc' | 'desc';
+
+function publicRoomModeLabel(modeId: string): string {
+  if (modeId === TressetteMode.TWO_PLAYERS) return '2 giocatori';
+  if (modeId === TressetteMode.THREE_WITH_MORTO) return '3 col morto';
+  return '4 giocatori';
+}
+
+function publicRoomStatusLabel(status: OG.GameStatus): string {
+  if (status === OG.GameStatus.WAITING) return 'In attesa';
+  if (status === OG.GameStatus.IN_PROGRESS) return 'In corso';
+  if (status === OG.GameStatus.FINISHED) return 'Terminata';
+  return String(status);
+}
+
 export function LobbyPage() {
   const navigate = useNavigate();
   const { rooms, fetchRooms, subscribeLobby, unsubscribeLobby, createRoom, loading, error } = useLobbyStore();
@@ -50,6 +73,62 @@ export function LobbyPage() {
   const [autoLoginDone, setAutoLoginDone] = useState(!!token);
   const [copied, setCopied] = useState<string | null>(null);
   const [myGames, setMyGames] = useState<MyGame[]>([]);
+  const [sortField, setSortField] = useState<PublicRoomSortField>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const toggleSort = (field: PublicRoomSortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const filteredRooms = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    let list = rooms;
+    if (q) {
+      list = rooms.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q) || r.hostName.toLowerCase().includes(q),
+      );
+    }
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'name':
+          cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+          break;
+        case 'hostName':
+          cmp = a.hostName.localeCompare(b.hostName, undefined, { sensitivity: 'base' });
+          break;
+        case 'currentPlayers':
+          cmp = a.currentPlayers - b.currentPlayers || a.maxPlayers - b.maxPlayers;
+          break;
+        case 'modeId':
+          cmp = publicRoomModeLabel(a.modeId).localeCompare(
+            publicRoomModeLabel(b.modeId),
+            undefined,
+            { sensitivity: 'base' },
+          );
+          break;
+        case 'status':
+          cmp = String(a.status).localeCompare(String(b.status));
+          break;
+        case 'hasPassword':
+          cmp = Number(a.hasPassword) - Number(b.hasPassword);
+          break;
+        default:
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [rooms, searchQuery, sortField, sortDir]);
+
+  const sortMark = (field: PublicRoomSortField) =>
+    sortField === field ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
 
   useEffect(() => {
     if (!token && !autoLoginDone) {
@@ -136,52 +215,203 @@ export function LobbyPage() {
 
       {error && <p className="font-body text-red-300/90">{error}</p>}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <GlassPanel className="overflow-hidden p-4 md:p-6">
+        <div className="mb-4">
+          <Input
+            id="room-search"
+            label="Cerca per nome o host"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filtra stanze…"
+          />
+        </div>
+
         {loading && rooms.length === 0 ? (
-          <GlassPanel className="p-8 text-center font-body text-gold/70">Caricamento stanze…</GlassPanel>
+          <p className="py-10 text-center font-body text-gold/70">Caricamento stanze…</p>
         ) : rooms.length === 0 ? (
-          <GlassPanel className="p-8 text-center font-body text-gold/70">Nessuna stanza aperta. Creane una!</GlassPanel>
+          <p className="py-10 text-center font-body text-gold/70">Nessuna stanza aperta. Creane una!</p>
+        ) : filteredRooms.length === 0 ? (
+          <p className="py-10 text-center font-body text-gold/70">Nessuna stanza corrisponde alla ricerca.</p>
         ) : (
-          rooms.map((r) => (
-            <GlassPanel key={r.id} className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="truncate font-display text-xl text-ivory">{r.name}</h3>
-                  {r.isPrivate && <Lock className="h-4 w-4 shrink-0 text-gold/60" aria-label="Privata" />}
-                </div>
-                <p className="mt-1 flex items-center gap-2 font-body text-gold/75">
-                  <Users className="h-4 w-4 shrink-0" />
-                  {r.currentPlayers} / {r.maxPlayers} giocatori · Host {r.hostName}
-                </p>
-                <p className="mt-1 text-xs uppercase tracking-wider text-gold/50">
-                  {r.gameType} · {r.modeId === '2p' ? '2 giocatori' : r.modeId === '3p_morto' ? '3 col morto' : '4 giocatori'} ·{' '}
-                  {r.status === OG.GameStatus.WAITING ? 'In attesa' : r.status === OG.GameStatus.IN_PROGRESS ? 'In corso' : r.status}
-                </p>
+          <>
+            <div className="hidden md:block">
+              <div className="overflow-x-auto rounded-lg border border-gold/15 bg-black/20">
+                <table className="w-full min-w-[720px] border-collapse text-left font-body text-sm text-ivory/90">
+                  <thead>
+                    <tr className="border-b border-gold/25 bg-black/30">
+                      <th className="px-3 py-3">
+                        <button
+                          type="button"
+                          className="font-display text-xs uppercase tracking-wider text-gold/85 hover:text-gold"
+                          onClick={() => toggleSort('name')}
+                        >
+                          Nome{sortMark('name')}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3">
+                        <button
+                          type="button"
+                          className="font-display text-xs uppercase tracking-wider text-gold/85 hover:text-gold"
+                          onClick={() => toggleSort('hostName')}
+                        >
+                          Host{sortMark('hostName')}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3">
+                        <button
+                          type="button"
+                          className="font-display text-xs uppercase tracking-wider text-gold/85 hover:text-gold"
+                          onClick={() => toggleSort('currentPlayers')}
+                        >
+                          Giocatori{sortMark('currentPlayers')}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3">
+                        <button
+                          type="button"
+                          className="font-display text-xs uppercase tracking-wider text-gold/85 hover:text-gold"
+                          onClick={() => toggleSort('modeId')}
+                        >
+                          Modalità{sortMark('modeId')}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3">
+                        <button
+                          type="button"
+                          className="font-display text-xs uppercase tracking-wider text-gold/85 hover:text-gold"
+                          onClick={() => toggleSort('status')}
+                        >
+                          Stato{sortMark('status')}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3 text-center">
+                        <button
+                          type="button"
+                          className="font-display text-xs uppercase tracking-wider text-gold/85 hover:text-gold"
+                          onClick={() => toggleSort('hasPassword')}
+                        >
+                          Password{sortMark('hasPassword')}
+                        </button>
+                      </th>
+                      <th className="px-3 py-3 font-display text-xs uppercase tracking-wider text-gold/70">
+                        Azioni
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRooms.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="border-b border-gold/10 transition hover:bg-gold/[0.04] last:border-0"
+                      >
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-display text-base text-ivory">{r.name}</span>
+                            {r.isPrivate && (
+                              <span className="text-[10px] uppercase tracking-wider text-gold/45">Privata</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-gold/80">{r.hostName}</td>
+                        <td className="px-3 py-3 text-gold/80">
+                          {r.currentPlayers} / {r.maxPlayers}
+                        </td>
+                        <td className="px-3 py-3 text-gold/75">{publicRoomModeLabel(r.modeId)}</td>
+                        <td className="px-3 py-3 text-gold/75">{publicRoomStatusLabel(r.status)}</td>
+                        <td className="px-3 py-3 text-center">
+                          {r.hasPassword ? (
+                            <Lock className="mx-auto h-4 w-4 text-gold/70" aria-label="Protetta da password" />
+                          ) : (
+                            <span className="text-gold/35">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              className="rounded p-2 text-gold/50 transition hover:bg-gold/10 hover:text-gold"
+                              title="Copia link"
+                              onClick={() => {
+                                copyRoomLink(r.id);
+                                setCopied(r.id);
+                                setTimeout(() => setCopied(null), 2000);
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </button>
+                            {copied === r.id && (
+                              <span className="text-xs text-emerald-300/90">Copiato!</span>
+                            )}
+                            <Link to={`/room/${r.id}`}>
+                              <Button type="button" variant="secondary" className="whitespace-nowrap">
+                                {r.status === OG.GameStatus.IN_PROGRESS ? 'Guarda' : 'Entra'}
+                              </Button>
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded p-2 text-gold/50 transition hover:bg-gold/10 hover:text-gold"
-                  title="Copia link"
-                  onClick={() => {
-                    copyRoomLink(r.id);
-                    setCopied(r.id);
-                    setTimeout(() => setCopied(null), 2000);
-                  }}
+            </div>
+
+            <div className="grid gap-4 md:hidden">
+              {filteredRooms.map((r) => (
+                <GlassPanel
+                  key={r.id}
+                  className="flex flex-col gap-3 border border-gold/15 bg-black/25 p-5 ring-0"
                 >
-                  <Copy className="h-4 w-4" />
-                  {copied === r.id && <span className="ml-1 text-xs text-emerald-300">Copiato!</span>}
-                </button>
-                <Link to={`/room/${r.id}`}>
-                  <Button type="button" variant="secondary">
-                    {r.status === OG.GameStatus.IN_PROGRESS ? 'Guarda' : 'Entra'}
-                  </Button>
-                </Link>
-              </div>
-            </GlassPanel>
-          ))
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate font-display text-xl text-ivory">{r.name}</h3>
+                      {(r.isPrivate || r.hasPassword) && (
+                        <Lock
+                          className="h-4 w-4 shrink-0 text-gold/60"
+                          aria-label={
+                            r.isPrivate && r.hasPassword
+                              ? 'Stanza privata con password'
+                              : r.hasPassword
+                                ? 'Protetta da password'
+                                : 'Stanza privata'
+                          }
+                        />
+                      )}
+                    </div>
+                    <p className="mt-1 flex items-center gap-2 font-body text-gold/75">
+                      <Users className="h-4 w-4 shrink-0" />
+                      {r.currentPlayers} / {r.maxPlayers} giocatori · Host {r.hostName}
+                    </p>
+                    <p className="mt-1 text-xs uppercase tracking-wider text-gold/50">
+                      {r.gameType} · {publicRoomModeLabel(r.modeId)} · {publicRoomStatusLabel(r.status)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded p-2 text-gold/50 transition hover:bg-gold/10 hover:text-gold"
+                      title="Copia link"
+                      onClick={() => {
+                        copyRoomLink(r.id);
+                        setCopied(r.id);
+                        setTimeout(() => setCopied(null), 2000);
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                      {copied === r.id && <span className="ml-1 text-xs text-emerald-300">Copiato!</span>}
+                    </button>
+                    <Link to={`/room/${r.id}`} className="ml-auto">
+                      <Button type="button" variant="secondary">
+                        {r.status === OG.GameStatus.IN_PROGRESS ? 'Guarda' : 'Entra'}
+                      </Button>
+                    </Link>
+                  </div>
+                </GlassPanel>
+              ))}
+            </div>
+          </>
         )}
-      </div>
+      </GlassPanel>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nuova stanza">
         <form
@@ -195,7 +425,7 @@ export function LobbyPage() {
                 numPlayers: selectedMode.players,
                 modeId,
                 isPrivate,
-                password: isPrivate && password ? password : undefined,
+                password: password.trim() ? password : undefined,
               });
               setModalOpen(false);
               navigate(`/room/${room.id}`);
@@ -246,14 +476,14 @@ export function LobbyPage() {
             {isPrivate && <Lock className="h-4 w-4 text-gold/50" />}
           </div>
 
-          {isPrivate && (
-            <Input
-              id="password"
-              label="Password (opzionale)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          )}
+          <Input
+            id="password"
+            label="Password (opzionale)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            autoComplete="new-password"
+          />
 
           <p className="font-body text-sm text-gold/60">
             Tressette · {selectedMode.players} giocatori · {selectedMode.label}

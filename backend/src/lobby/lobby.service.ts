@@ -2,7 +2,10 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import {
   CreateRoomRequest,
@@ -16,6 +19,7 @@ import { TressetteMode } from '@online-games/shared';
 import { v4 as uuidv4 } from 'uuid';
 import { GamesService } from '../games/games.service';
 import { TressetteEngine } from '../games/engines/tressette/tressette.engine';
+import { LobbyPersistenceService } from './lobby-persistence.service';
 
 export interface LobbyRoom {
   id: string;
@@ -25,6 +29,8 @@ export interface LobbyRoom {
   status: GameStatus;
   hostId: string;
   createdAt: string;
+  /** ISO timestamp of last meaningful human-driven lobby/game activity */
+  lastHumanActivity: string;
   maxPlayers: number;
   isPrivate: boolean;
   password?: string;
@@ -32,11 +38,54 @@ export interface LobbyRoom {
 }
 
 @Injectable()
-export class LobbyService {
+export class LobbyService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(LobbyService.name);
   private readonly rooms = new Map<string, LobbyRoom>();
   private readonly processing = new Set<string>();
 
-  constructor(private readonly gamesService: GamesService) {}
+  constructor(
+    private readonly gamesService: GamesService,
+    private readonly lobbyPersistence: LobbyPersistenceService,
+  ) {}
+
+  onModuleInit(): void {
+    const data = this.lobbyPersistence.load();
+    if (data?.rooms?.length) {
+      for (const room of data.rooms) {
+        const r = { ...room };
+        if (!r.lastHumanActivity) {
+          r.lastHumanActivity = r.createdAt;
+        }
+        this.rooms.set(r.id, r);
+      }
+      for (const [gameId, engineState] of Object.entries(data.engines ?? {})) {
+        try {
+          this.gamesService.restoreEngine(gameId, engineState);
+        } catch (e) {
+          this.logger.warn(`Failed to restore game ${gameId}: ${String(e)}`);
+        }
+      }
+    }
+    this.lobbyPersistence.attachAutosave(() => this.saveAll());
+  }
+
+  onModuleDestroy(): void {
+    this.saveAll();
+    this.lobbyPersistence.detachAutosave();
+  }
+
+  saveAll(): void {
+    const rooms = this.listAllRooms();
+    const engines = new Map<string, unknown>();
+    for (const [gameId, engine] of this.gamesService.getAllEngines()) {
+      if (engine instanceof TressetteEngine) {
+        engines.set(gameId, engine.getPersistenceState());
+      } else {
+        engines.set(gameId, engine.getState());
+      }
+    }
+    this.lobbyPersistence.save(rooms, engines);
+  }
 
   createRoom(
     hostId: string,
@@ -54,6 +103,7 @@ export class LobbyService {
       numPlayers: maxPlayers,
       options: { mode, modeId: dto.modeId },
     };
+    const now = new Date().toISOString();
     const room: LobbyRoom = {
       id,
       name: dto.name,
@@ -69,10 +119,11 @@ export class LobbyService {
       ],
       status: GameStatus.WAITING,
       hostId,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      lastHumanActivity: now,
       maxPlayers,
       isPrivate: dto.isPrivate,
-      password: dto.isPrivate ? dto.password : undefined,
+      password: dto.password || undefined,
     };
     this.rooms.set(id, room);
     return room;
@@ -94,6 +145,7 @@ export class LobbyService {
         status: r.status,
         hostName: r.players.find((p) => p.id === r.hostId)?.name ?? 'Host',
         isPrivate: r.isPrivate,
+        hasPassword: !!r.password,
         modeId: String(r.config.options['modeId'] ?? ''),
       }));
   }
@@ -126,12 +178,13 @@ export class LobbyService {
       throw new BadRequestException('Game already started');
     }
     if (room.players.some((p) => p.id === userId)) {
+      room.lastHumanActivity = new Date().toISOString();
       return room;
     }
     if (room.players.length >= room.maxPlayers) {
       throw new BadRequestException('Room is full');
     }
-    if (room.isPrivate && room.password && room.password !== password) {
+    if (room.password && room.password !== (password ?? '')) {
       throw new ForbiddenException('Invalid room password');
     }
     const seatIndex = room.players.length;
@@ -142,6 +195,7 @@ export class LobbyService {
       seatIndex,
       connected: true,
     });
+    room.lastHumanActivity = new Date().toISOString();
     return room;
   }
 
@@ -150,15 +204,55 @@ export class LobbyService {
     if (!room) return;
     room.players = room.players.filter((p) => p.id !== userId);
     if (room.players.length === 0) {
-      if (room.gameId) {
-        this.gamesService.removeGame(room.gameId);
-      }
-      this.rooms.delete(roomId);
+      this.destroyRoom(roomId);
       return;
     }
     if (room.hostId === userId) {
       room.hostId = room.players[0].id;
     }
+  }
+
+  /** Removes game engine and room state. */
+  private destroyRoom(roomId: string): void {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (room.gameId) {
+      this.gamesService.removeGame(room.gameId);
+    }
+    this.rooms.delete(roomId);
+    this.processing.delete(roomId);
+  }
+
+  closeRoom(roomId: string, requesterId: string): void {
+    const room = this.getRoom(roomId);
+    if (room.hostId !== requesterId) {
+      throw new ForbiddenException('Only the host can close the room');
+    }
+    this.destroyRoom(roomId);
+  }
+
+  /** Used by idle cleanup (no host check). */
+  forceCloseRoom(roomId: string): void {
+    if (!this.rooms.has(roomId)) return;
+    this.destroyRoom(roomId);
+  }
+
+  touchHumanActivity(roomId: string): void {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    room.lastHumanActivity = new Date().toISOString();
+  }
+
+  getStaleRooms(maxIdleMs: number): string[] {
+    const now = Date.now();
+    const stale: string[] = [];
+    for (const room of this.rooms.values()) {
+      const ts = Date.parse(room.lastHumanActivity);
+      if (Number.isFinite(ts) && now - ts > maxIdleMs) {
+        stale.push(room.id);
+      }
+    }
+    return stale;
   }
 
   markPlayerConnection(
@@ -170,6 +264,9 @@ export class LobbyService {
     if (!room) return;
     const p = room.players.find((x) => x.id === userId);
     if (p) p.connected = connected;
+    if (p && p.type === PlayerType.HUMAN && connected) {
+      room.lastHumanActivity = new Date().toISOString();
+    }
     if (room.gameId) {
       const engine = this.gamesService.tryGetEngine(room.gameId);
       if (engine && 'markPlayerConnected' in engine) {
@@ -197,6 +294,7 @@ export class LobbyService {
       seatIndex: room.players.length,
       connected: true,
     });
+    room.lastHumanActivity = new Date().toISOString();
     return room;
   }
 
@@ -229,6 +327,7 @@ export class LobbyService {
     room.players = fullState.players;
     room.gameId = gameId;
     room.status = GameStatus.IN_PROGRESS;
+    room.lastHumanActivity = new Date().toISOString();
     return { gameId };
   }
 
@@ -284,3 +383,4 @@ export class LobbyService {
     room.status = GameStatus.FINISHED;
   }
 }
+

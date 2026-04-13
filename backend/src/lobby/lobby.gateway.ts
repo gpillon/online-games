@@ -1,4 +1,9 @@
-import { Logger, UseFilters } from '@nestjs/common';
+import {
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  UseFilters,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
@@ -35,12 +40,19 @@ import { JwtPayload } from '../auth/jwt.strategy';
   },
 })
 @UseFilters(new WsExceptionFilter())
-export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class LobbyGateway
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleInit,
+    OnModuleDestroy
+{
   @WebSocketServer()
   server!: Server;
 
   private readonly logger = new Logger(LobbyGateway.name);
   private readonly ai = new TressetteAI();
+  private idleCheckInterval?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly lobbyService: LobbyService,
@@ -49,6 +61,19 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
   ) {}
+
+  onModuleInit() {
+    this.idleCheckInterval = setInterval(() => {
+      void this.closeStaleRooms();
+    }, 60_000);
+  }
+
+  onModuleDestroy() {
+    if (this.idleCheckInterval) {
+      clearInterval(this.idleCheckInterval);
+      this.idleCheckInterval = undefined;
+    }
+  }
 
   async handleConnection(client: Socket) {
     const token =
@@ -284,6 +309,7 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (current !== userId) {
       throw new WsException('Not your turn');
     }
+    this.lobbyService.touchHumanActivity(roomId);
     const move =
       body.move ??
       (body.type === 'play_card'
@@ -315,6 +341,18 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return result;
   }
 
+  @SubscribeMessage(WS_EVENTS.ROOM_CLOSE)
+  async handleRoomClose(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string },
+  ) {
+    const userId = client.data.userId as string;
+    await this.broadcastRoomClosed(body.roomId, () =>
+      this.lobbyService.closeRoom(body.roomId, userId),
+    );
+    return { ok: true };
+  }
+
   @SubscribeMessage(WS_EVENTS.ROOM_CHAT)
   handleChat(
     @ConnectedSocket() client: Socket,
@@ -336,6 +374,32 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private emitRoomsUpdate() {
     this.server.to('lobby').emit(WS_EVENTS.LOBBY_ROOMS_UPDATE, this.lobbyService.listRooms());
+  }
+
+  private async broadcastRoomClosed(roomId: string, destroy: () => void): Promise<void> {
+    const roomNs = `room:${roomId}`;
+    const sockets = await this.server.in(roomNs).fetchSockets();
+    destroy();
+    const payload = { id: roomId, closed: true as const };
+    for (const s of sockets) {
+      s.emit(WS_EVENTS.ROOM_UPDATE, payload);
+      void s.leave(roomNs);
+      if (s.data.roomId === roomId) {
+        delete s.data.roomId;
+      }
+    }
+    this.emitRoomsUpdate();
+  }
+
+  private async closeStaleRooms() {
+    const stale = this.lobbyService.getStaleRooms(3 * 60 * 1000);
+    for (const roomId of stale) {
+      try {
+        await this.broadcastRoomClosed(roomId, () => this.lobbyService.forceCloseRoom(roomId));
+      } catch (err) {
+        this.logger.warn(`Stale room close failed for ${roomId}: ${String(err)}`);
+      }
+    }
   }
 
   private async emitAfterMove(

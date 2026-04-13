@@ -21,7 +21,6 @@ function playerBySeat(players: TressettePlayerInfo[], seat: number | null) {
 export function TressetteGame({ gameId }: GameViewProps) {
   const client = useGameStore((s) => s.clientState);
   const validCardIds = useGameStore((s) => s.validCardIds);
-  const trickCollectKey = useGameStore((s) => s.trickCollectKey);
   const playCard = useGameStore((s) => s.playCard);
   const sendDeclaration = useGameStore((s) => s.sendDeclaration);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -59,12 +58,7 @@ export function TressetteGame({ gameId }: GameViewProps) {
 
   const center = (
     <div className="flex flex-col items-center gap-4">
-      <TrickArea
-        trick={client.currentTrick}
-        collectKey={trickCollectKey}
-        mySeatIndex={mySeat}
-        numPlayers={numPlayers}
-      />
+      <TrickArea trick={client.currentTrick} mySeatIndex={mySeat} numPlayers={numPlayers} />
       {client.canDeclare && (
         <GlassPanel className="flex flex-wrap justify-center gap-2 p-3">
           <span className="w-full text-center font-display text-sm text-gold">Dichiarazioni</span>

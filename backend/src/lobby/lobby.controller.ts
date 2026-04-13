@@ -38,7 +38,13 @@ export class LobbyController {
   @UseGuards(JwtAuthGuard)
   getMyActiveGames(
     @CurrentUser() user: { id: string },
-  ): { roomId: string; gameId: string; name: string; status: GameStatus }[] {
+  ): {
+    roomId: string;
+    gameId: string;
+    name: string;
+    status: GameStatus;
+    hasPassword: boolean;
+  }[] {
     return this.lobbyService
       .listAllRooms()
       .filter(
@@ -51,6 +57,7 @@ export class LobbyController {
         gameId: r.gameId ?? '',
         name: r.name,
         status: r.status,
+        hasPassword: !!r.password,
       }));
   }
 }

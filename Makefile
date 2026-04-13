@@ -1,4 +1,4 @@
-.PHONY: help install build dev dev-backend dev-frontend dev-db clean docker-build docker-up docker-down lint shared
+.PHONY: help install build dev dev-backend dev-frontend dev-db clean docker-build docker-up docker-down lint shared push
 
 SHELL := /bin/bash
 
@@ -66,6 +66,18 @@ lint: ## Run linters
 typecheck: shared ## TypeScript check without emit
 	cd backend && npx tsc --noEmit -p tsconfig.json
 	cd frontend && npx tsc --noEmit
+
+push: ## Build, commit and push; uses 'latest' tag if no git tags exist
+	@echo "Checking for git tags..."
+	@TAG=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
+	if [ -z "$$TAG" ]; then \
+		echo "No tags found, pushing to main (images will be tagged 'latest')"; \
+	else \
+		echo "Latest tag: $$TAG"; \
+	fi
+	git push origin main
+	@echo "Pushed to main. CI will build and publish images."
+	@echo "ArgoCD will pick up the new Helm chart automatically."
 
 # ──────────────────────────────────────────────
 # Helm

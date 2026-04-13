@@ -5,11 +5,12 @@ import { GamesModule } from '../games/games.module';
 import { UsersModule } from '../users/users.module';
 import { LobbyController } from './lobby.controller';
 import { LobbyGateway } from './lobby.gateway';
+import { LobbyPersistenceService } from './lobby-persistence.service';
 import { LobbyService } from './lobby.service';
 
 @Module({
   imports: [GamesModule, UsersModule, AuthModule, ConfigModule],
   controllers: [LobbyController],
-  providers: [LobbyService, LobbyGateway],
+  providers: [LobbyService, LobbyGateway, LobbyPersistenceService],
 })
 export class LobbyModule {}

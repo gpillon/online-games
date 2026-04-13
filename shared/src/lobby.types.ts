@@ -36,6 +36,7 @@ export interface RoomListItem {
   status: GameStatus;
   hostName: string;
   isPrivate: boolean;
+  hasPassword: boolean;
   modeId: string;
 }
 

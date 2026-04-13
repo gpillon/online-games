@@ -4,7 +4,6 @@ import { CardComponent } from '@/components/game/CardComponent';
 
 export interface TrickAreaProps {
   trick: TrickCard[];
-  collectKey: number;
   mySeatIndex: number;
   numPlayers: number;
 }
@@ -22,7 +21,7 @@ function slotAngle(seat: number, mySeat: number, numPlayers: number): number {
   return m4[rel] ?? 0;
 }
 
-export function TrickArea({ trick, collectKey, mySeatIndex, numPlayers }: TrickAreaProps) {
+export function TrickArea({ trick, mySeatIndex, numPlayers }: TrickAreaProps) {
   const n = Math.max(numPlayers, 2);
 
   return (
@@ -36,7 +35,7 @@ export function TrickArea({ trick, collectKey, mySeatIndex, numPlayers }: TrickA
           const y = -Math.cos(rad) * dist * 0.5;
           return (
             <motion.div
-              key={`${collectKey}-${t.card.id}-${i}`}
+              key={t.card.id}
               className="absolute"
               initial={{ opacity: 0, scale: 0.5, x: x * 1.8, y: y * 1.8 + 40 }}
               animate={{ opacity: 1, scale: 1, x, y }}

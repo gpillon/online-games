@@ -18,6 +18,7 @@ export const WS_EVENTS = {
   ROOM_CHAT_MESSAGE: 'room:chat_message',
   ROOM_ADD_AI: 'room:add_ai',
   ROOM_START_GAME: 'room:start_game',
+  ROOM_CLOSE: 'room:close',
   GAME_STATE: 'game:state',
   GAME_MOVE: 'game:move',
   GAME_MOVE_RESULT: 'game:move_result',
