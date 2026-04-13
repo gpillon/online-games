@@ -102,6 +102,13 @@ export class LobbyService {
     return this.rooms.get(roomId);
   }
 
+  findRoomByGameId(gameId: string): LobbyRoom | undefined {
+    for (const room of this.rooms.values()) {
+      if (room.gameId === gameId) return room;
+    }
+    return undefined;
+  }
+
   joinRoom(
     roomId: string,
     userId: string,

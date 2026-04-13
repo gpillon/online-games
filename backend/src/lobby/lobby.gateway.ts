@@ -205,12 +205,18 @@ export class LobbyGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() body: { gameId: string },
   ) {
     const userId = client.data.userId as string;
-    const roomId = client.data.roomId as string | undefined;
-    if (!roomId) throw new WsException('Not in a room');
-    const room = this.lobbyService.getRoom(roomId);
-    if (room.gameId !== body.gameId) throw new WsException('Game mismatch');
+    const room = this.lobbyService.findRoomByGameId(body.gameId);
+    if (!room) throw new WsException('Game room not found');
+    if (!room.players.some((p) => p.id === userId)) {
+      throw new WsException('Not a player in this game');
+    }
     const engine = this.gamesService.tryGetEngine(body.gameId);
     if (!engine) throw new WsException('Game not found');
+    if (!client.data.roomId) {
+      client.data.roomId = room.id;
+      void client.join(`room:${room.id}`);
+      this.lobbyService.markPlayerConnection(room.id, userId, true);
+    }
     client.emit(WS_EVENTS.GAME_STATE, engine.getClientState(userId));
     return { ok: true };
   }
