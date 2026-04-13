@@ -2,7 +2,7 @@ FROM node:20-alpine AS base
 WORKDIR /app
 
 FROM base AS shared-build
-COPY shared/package.json shared/tsconfig.json ./shared/
+COPY shared/package.json shared/tsconfig*.json ./shared/
 COPY shared/src ./shared/src
 RUN cd shared && npm install && npm run build
 
