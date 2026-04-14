@@ -5,6 +5,8 @@ import { create } from 'zustand';
 import { getSocket } from '@/services/socket';
 import { useAuthStore } from '@/stores/authStore';
 
+type DeclPayload = { type: TressetteDeclarationType; cardIds: string[] };
+
 interface GameState {
   gameId: string | null;
   gameType: OG.GameType | null;
@@ -12,7 +14,7 @@ interface GameState {
   error: string | null;
   validCardIds: string[] | null;
   lastTrickModalOpen: boolean;
-  pendingDeclaration: { type: TressetteDeclarationType; cardIds: string[] } | null;
+  pendingDeclarations: DeclPayload[];
   setLastTrickModalOpen: (open: boolean) => void;
   bindGameEvents: (gameId: string, gameType?: OG.GameType) => () => void;
   playCard: (cardId: string) => void;
@@ -27,7 +29,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   error: null,
   validCardIds: null,
   lastTrickModalOpen: false,
-  pendingDeclaration: null,
+  pendingDeclarations: [],
 
   setLastTrickModalOpen: (open) => set({ lastTrickModalOpen: open }),
 
@@ -39,11 +41,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       error: null,
       validCardIds: null,
       lastTrickModalOpen: false,
-      pendingDeclaration: null,
+      pendingDeclarations: [],
     }),
 
   playCard: (cardId) => {
-    const { gameId, pendingDeclaration } = get();
+    const { gameId, pendingDeclarations } = get();
     const token = useAuthStore.getState().token;
     if (!gameId) return;
     const payload: Record<string, unknown> = {
@@ -52,15 +54,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       type: 'play_card',
       data: { cardId },
     };
-    if (pendingDeclaration) {
-      payload.declaration = pendingDeclaration;
-      set({ pendingDeclaration: null });
+    if (pendingDeclarations.length === 1) {
+      payload.declaration = pendingDeclarations[0];
+    } else if (pendingDeclarations.length > 1) {
+      payload.declarations = pendingDeclarations;
     }
+    set({ pendingDeclarations: [] });
     getSocket()?.emit(WS_EVENTS.GAME_MOVE, payload);
   },
 
   sendDeclaration: (type, cardIds) => {
-    set({ pendingDeclaration: { type, cardIds } });
+    set((s) => ({
+      pendingDeclarations: [...s.pendingDeclarations, { type, cardIds }],
+    }));
   },
 
   bindGameEvents: (gameId: string, gameType: OG.GameType = OG.GameType.TRESSETTE) => {

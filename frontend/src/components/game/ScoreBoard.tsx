@@ -30,37 +30,41 @@ export function ScoreBoard({
   targetScore,
 }: ScoreBoardProps) {
   return (
-    <GlassPanel className="px-4 py-3">
-      <div className="flex items-center justify-between gap-6">
-        <div>
-          <p className="font-display text-xs uppercase tracking-[0.2em] text-gold/70">Squadra A</p>
+    <GlassPanel className="min-w-0 max-w-full overflow-hidden px-3 py-2 sm:px-4 sm:py-3">
+      <div className="flex items-center justify-between gap-2 sm:gap-6">
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-[10px] uppercase tracking-[0.15em] text-gold/70 sm:text-xs sm:tracking-[0.2em]">
+            Squadra A
+          </p>
           {!!teamANames?.length && (
-            <p className="font-body text-xs text-gold/50">{teamANames.join(' · ')}</p>
+            <p className="truncate font-body text-[10px] text-gold/50 sm:text-xs">{teamANames.join(' · ')}</p>
           )}
           <motion.p
             key={teamA}
             initial={{ scale: 1.15, color: '#f0d060' }}
             animate={{ scale: 1, color: '#faf3e0' }}
-            className="font-display text-3xl text-ivory"
+            className="font-display text-2xl text-ivory sm:text-3xl"
           >
             {formatScore(teamA)}
           </motion.p>
         </div>
-        <div className="text-center font-body text-sm text-gold/80">
-          <p className="font-display text-xs tracking-widest text-gold">{roundLabel}</p>
-          <p>{handLabel}</p>
-          <p className="mt-1 text-xs text-gold/60">Obiettivo {targetScore}</p>
+        <div className="w-max max-w-[36%] shrink-0 px-1 text-center font-body text-[11px] text-gold/80 sm:max-w-none sm:px-2 sm:text-sm">
+          <p className="font-display text-[10px] tracking-wide text-gold sm:text-xs sm:tracking-widest">{roundLabel}</p>
+          <p className="line-clamp-2 leading-tight">{handLabel}</p>
+          <p className="mt-0.5 text-[10px] text-gold/60 sm:mt-1 sm:text-xs">Obiettivo {targetScore}</p>
         </div>
-        <div className="text-right">
-          <p className="font-display text-xs uppercase tracking-[0.2em] text-gold/70">Squadra B</p>
+        <div className="min-w-0 flex-1 text-right">
+          <p className="font-display text-[10px] uppercase tracking-[0.15em] text-gold/70 sm:text-xs sm:tracking-[0.2em]">
+            Squadra B
+          </p>
           {!!teamBNames?.length && (
-            <p className="font-body text-xs text-gold/50">{teamBNames.join(' · ')}</p>
+            <p className="truncate font-body text-[10px] text-gold/50 sm:text-xs">{teamBNames.join(' · ')}</p>
           )}
           <motion.p
             key={teamB}
             initial={{ scale: 1.15, color: '#f0d060' }}
             animate={{ scale: 1, color: '#faf3e0' }}
-            className="font-display text-3xl text-ivory"
+            className="font-display text-2xl text-ivory sm:text-3xl"
           >
             {formatScore(teamB)}
           </motion.p>

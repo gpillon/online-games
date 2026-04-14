@@ -2,6 +2,7 @@ import type { Card } from '@online-games/shared';
 import * as OG from '@online-games/shared';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CardComponent } from '@/components/game/CardComponent';
+import { useViewportWidth } from '@/hooks/useViewportWidth';
 
 function sortHand(cards: Card[]): Card[] {
   const rankOrder = new Map(OG.TRESSETTE_CARD_ORDER.map((r, i) => [r, i]));
@@ -21,14 +22,26 @@ export interface PlayerHandProps {
 
 export function PlayerHand({ cards, selectedId, onSelect, validCardIds, myTurn }: PlayerHandProps) {
   const sorted = sortHand(cards);
-  const cardW = myTurn ? 108 : 96;
-  const cardH = myTurn ? 152 : 136;
-  const overlap = myTurn ? 56 : 52;
-  const totalWidth = Math.max(320, (sorted.length - 1) * overlap + cardW);
-  const handHeight = myTurn ? 176 : 160;
+  const vw = useViewportWidth();
+  const narrow = vw < 640;
+
+  const cardW = narrow ? (myTurn ? 68 : 60) : myTurn ? 108 : 96;
+  const cardH = narrow ? (myTurn ? 96 : 84) : myTurn ? 152 : 136;
+  let overlap = narrow ? (myTurn ? 32 : 28) : myTurn ? 56 : 52;
+
+  const maxHandWidth = Math.max(200, vw - 20);
+  let totalWidth = Math.max(narrow ? 220 : 320, (sorted.length - 1) * overlap + cardW);
+  if (sorted.length > 1 && totalWidth > maxHandWidth) {
+    overlap = Math.max(18, Math.floor((maxHandWidth - cardW) / (sorted.length - 1)));
+    totalWidth = (sorted.length - 1) * overlap + cardW;
+  }
+  const handHeight = narrow ? (myTurn ? 112 : 100) : myTurn ? 176 : 160;
 
   return (
-    <div className="relative flex justify-center" style={{ width: totalWidth, height: handHeight }}>
+    <div
+      className="relative mx-auto flex max-w-full justify-center overflow-x-hidden"
+      style={{ width: totalWidth, height: handHeight, maxWidth: maxHandWidth }}
+    >
       <AnimatePresence>
         {sorted.map((card, i) => {
           const isPlayable =

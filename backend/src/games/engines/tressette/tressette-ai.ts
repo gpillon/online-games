@@ -8,6 +8,19 @@ import {
 } from '@online-games/shared';
 import { IAIPlayer } from '../../interfaces/ai-player.interface';
 
+const VALUABLE_RANKS = new Set([Rank.ASSO, Rank.DUE, Rank.TRE]);
+const SUIT_NAMES: Record<string, string> = {
+  bastoni: 'bastoni',
+  coppe: 'coppe',
+  denara: 'denari',
+  spade: 'spade',
+};
+const RANK_NAMES: Record<number, string> = {
+  1: "l'asso",
+  2: 'il due',
+  3: 'il tre',
+};
+
 function rankStrength(rank: Rank): number {
   const i = TRESSETTE_CARD_ORDER.indexOf(rank);
   return i === -1 ? 999 : i;
@@ -38,12 +51,7 @@ function legalCards(hand: Card[], ledSuit?: Suit): Card[] {
 }
 
 function napoletanaIfAny(hand: Card[]): Card[] | null {
-  const suits: Suit[] = [
-    Suit.BASTONI,
-    Suit.COPPE,
-    Suit.DENARA,
-    Suit.SPADE,
-  ];
+  const suits: Suit[] = [Suit.BASTONI, Suit.COPPE, Suit.DENARA, Suit.SPADE];
   for (const suit of suits) {
     const has = (r: Rank) => hand.some((c) => c.suit === suit && c.rank === r);
     if (has(Rank.ASSO) && has(Rank.DUE) && has(Rank.TRE)) {
@@ -65,6 +73,13 @@ function bongiocoIfAny(hand: Card[]): Card[] | null {
   return null;
 }
 
+export interface AIMoveResult {
+  type: 'play';
+  cardId: string;
+  declaration?: { type: TressetteDeclarationType; cardIds: string[] };
+  chat?: string;
+}
+
 export class TressetteAI implements IAIPlayer {
   getDifficulty(): string {
     return 'intermediate';
@@ -75,6 +90,7 @@ export class TressetteAI implements IAIPlayer {
     const hand = [...state.myHand];
     const led = state.currentTrick[0]?.card.suit;
     const options = legalCards(hand, led);
+    const followingSuit = !!led && options[0]?.suit === led;
     const contender = state.currentTrick.length
       ? bestContenderInTrick(state.currentTrick, led!)
       : null;
@@ -84,13 +100,14 @@ export class TressetteAI implements IAIPlayer {
     let pick: Card;
     if (!state.currentTrick.length) {
       pick = this.chooseLead(options, winning);
+    } else if (!followingSuit) {
+      pick = this.pickDiscard(options);
     } else if (!contender) {
       pick = this.pickLowest(options);
     } else {
       const canWin = options.filter(
         (c) =>
-          c.suit === led &&
-          rankStrength(c.rank) < contender.strength,
+          c.suit === led && rankStrength(c.rank) < contender.strength,
       );
       if (canWin.length) {
         pick = winning
@@ -105,32 +122,72 @@ export class TressetteAI implements IAIPlayer {
       }
     }
 
-    const move: {
-      type: 'play';
-      cardId: string;
-      declaration?: { type: TressetteDeclarationType; cardIds: string[] };
-    } = { type: 'play', cardId: pick.id };
+    const move: AIMoveResult & { declarations?: { type: TressetteDeclarationType; cardIds: string[] }[] } = {
+      type: 'play',
+      cardId: pick.id,
+    };
 
-    if (state.canDeclare) {
-      const napo = napoletanaIfAny(hand);
-      if (napo && napo.some((c) => c.id === pick.id)) {
-        move.declaration = {
-          type: TressetteDeclarationType.NAPOLETANA,
-          cardIds: napo.map((c) => c.id),
-        };
-      } else {
-        const bong = bongiocoIfAny(hand);
-        if (bong && Math.random() > 0.45) {
-          move.declaration = {
-            type: TressetteDeclarationType.BONGIOCO,
-            cardIds: bong.map((c) => c.id),
-          };
+    const avail = (
+      state as unknown as { availableDeclarations?: TressetteDeclarationType[] }
+    ).availableDeclarations;
+    if (state.canDeclare && avail && avail.length > 0) {
+      const decls: { type: TressetteDeclarationType; cardIds: string[] }[] = [];
+      if (avail.includes(TressetteDeclarationType.NAPOLETANA)) {
+        const napo = napoletanaIfAny(hand);
+        if (napo) {
+          decls.push({
+            type: TressetteDeclarationType.NAPOLETANA,
+            cardIds: napo.map((c) => c.id),
+          });
         }
       }
+      if (avail.includes(TressetteDeclarationType.BONGIOCO)) {
+        const bong = bongiocoIfAny(hand);
+        if (bong) {
+          decls.push({
+            type: TressetteDeclarationType.BONGIOCO,
+            cardIds: bong.map((c) => c.id),
+          });
+        }
+      }
+      if (decls.length > 0) {
+        move.declarations = decls;
+      }
+    }
+
+    if (!state.currentTrick.length) {
+      move.chat = this.buildLeadChat(pick, hand);
     }
 
     void playerId;
     return move;
+  }
+
+  private buildLeadChat(pick: Card, hand: Card[]): string | undefined {
+    if (hand.length === 1) return 'Volo!';
+
+    const suitCards = hand.filter((c) => c.suit === pick.suit);
+    if (suitCards.length === 1) return 'Volo!';
+
+    if (VALUABLE_RANKS.has(pick.rank)) {
+      const name = RANK_NAMES[pick.rank];
+      const suitName = SUIT_NAMES[pick.suit] ?? pick.suit;
+      const others = suitCards.filter((c) => c.id !== pick.id);
+      const otherValuable = others.filter((c) => VALUABLE_RANKS.has(c.rank));
+      if (otherValuable.length >= 1) {
+        const otherName = otherValuable.map((c) => RANK_NAMES[c.rank] ?? String(c.rank)).join(' e ');
+        return `Ho ${name} di ${suitName}, e ${otherName}`;
+      }
+      return `Ho ${name} di ${suitName}`;
+    }
+
+    const valuableInSuit = suitCards.filter((c) => VALUABLE_RANKS.has(c.rank));
+    if (valuableInSuit.length > 0) {
+      const suitName = SUIT_NAMES[pick.suit] ?? pick.suit;
+      return `Voglio ${suitName}`;
+    }
+
+    return 'Messo male...';
   }
 
   private isLikelyWinning(
@@ -166,6 +223,19 @@ export class TressetteAI implements IAIPlayer {
     const fromLong = options.filter((c) => c.suit === longestSuit);
     const pool = fromLong.length ? fromLong : options;
     return pool.reduce((a, b) =>
+      rankStrength(a.rank) > rankStrength(b.rank) ? a : b,
+    );
+  }
+
+  /** When discarding off-suit: save valuable cards (Asso/Due/Tre), sacrifice scartine first. */
+  private pickDiscard(options: Card[]): Card {
+    const scartine = options.filter((c) => !VALUABLE_RANKS.has(c.rank));
+    if (scartine.length > 0) {
+      return scartine.reduce((a, b) =>
+        rankStrength(a.rank) > rankStrength(b.rank) ? a : b,
+      );
+    }
+    return options.reduce((a, b) =>
       rankStrength(a.rank) > rankStrength(b.rank) ? a : b,
     );
   }

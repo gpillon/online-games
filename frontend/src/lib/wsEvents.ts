@@ -31,5 +31,8 @@ export const WS_EVENTS = {
   GAME_REQUEST_STATE: 'game:request_state',
   GAME_EMOTE: 'game:emote',
   ROOM_SPECTATE: 'room:spectate',
+  ROOM_KICK: 'room:kick',
+  ROOM_REORDER: 'room:reorder',
+  ROOM_REMOVE_AI: 'room:remove_ai',
   ERROR: 'error',
 } as const;

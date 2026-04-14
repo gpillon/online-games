@@ -1,6 +1,7 @@
 import type { TrickCard } from '@online-games/shared';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CardComponent } from '@/components/game/CardComponent';
+import { useViewportWidth } from '@/hooks/useViewportWidth';
 
 export interface TrickAreaProps {
   trick: TrickCard[];
@@ -48,16 +49,24 @@ function winnerDirection(
 }
 
 export function TrickArea({ trick, mySeatIndex, numPlayers, trickWinnerSeat }: TrickAreaProps) {
-  const exit =
+  const vw = useViewportWidth();
+  const narrow = vw < 640;
+  const posScale = narrow ? 0.55 : 1;
+  const cardW = narrow ? 72 : 96;
+  const cardH = narrow ? 102 : 136;
+
+  const exitBase =
     trickWinnerSeat !== undefined
       ? winnerDirection(trickWinnerSeat, mySeatIndex, numPlayers)
       : { x: 0, y: -60 };
+  const exit = { x: exitBase.x * posScale, y: exitBase.y * posScale };
 
   return (
-    <div className="relative flex min-h-[160px] items-center justify-center">
+    <div className="relative flex min-h-[120px] items-center justify-center overflow-x-hidden sm:min-h-[160px]">
       <AnimatePresence mode="popLayout">
         {trick.map((t, i) => {
-          const pos = seatPosition(t.seatIndex, mySeatIndex, numPlayers);
+          const raw = seatPosition(t.seatIndex, mySeatIndex, numPlayers);
+          const pos = { x: raw.x * posScale, y: raw.y * posScale };
           return (
             <motion.div
               key={t.card.id}
@@ -67,7 +76,12 @@ export function TrickArea({ trick, mySeatIndex, numPlayers, trickWinnerSeat }: T
               exit={{ opacity: 0, scale: 0.6, x: exit.x, y: exit.y }}
               transition={{ type: 'spring', stiffness: 350, damping: 24, delay: i * 0.04 }}
             >
-              <CardComponent card={t.card} layoutId={`trick-${t.card.id}`} />
+              <CardComponent
+                card={t.card}
+                layoutId={`trick-${t.card.id}`}
+                width={cardW}
+                height={cardH}
+              />
             </motion.div>
           );
         })}

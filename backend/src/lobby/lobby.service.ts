@@ -299,6 +299,64 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
     return room;
   }
 
+  kickPlayer(roomId: string, requesterId: string, targetId: string): LobbyRoom {
+    const room = this.getRoom(roomId);
+    if (room.hostId !== requesterId) {
+      throw new ForbiddenException('Only host can kick players');
+    }
+    if (room.status !== GameStatus.WAITING) {
+      throw new BadRequestException('Cannot kick during a game');
+    }
+    if (targetId === requesterId) {
+      throw new BadRequestException('Cannot kick yourself');
+    }
+    room.players = room.players.filter((p) => p.id !== targetId);
+    this.reindexSeats(room);
+    return room;
+  }
+
+  removeAI(roomId: string, requesterId: string, targetId: string): LobbyRoom {
+    const room = this.getRoom(roomId);
+    if (room.hostId !== requesterId) {
+      throw new ForbiddenException('Only host can remove AI');
+    }
+    if (room.status !== GameStatus.WAITING) {
+      throw new BadRequestException('Cannot remove AI during a game');
+    }
+    const target = room.players.find((p) => p.id === targetId);
+    if (!target || target.type !== PlayerType.AI) {
+      throw new BadRequestException('Target is not an AI player');
+    }
+    room.players = room.players.filter((p) => p.id !== targetId);
+    this.reindexSeats(room);
+    return room;
+  }
+
+  reorderPlayers(roomId: string, requesterId: string, orderedIds: string[]): LobbyRoom {
+    const room = this.getRoom(roomId);
+    if (room.hostId !== requesterId) {
+      throw new ForbiddenException('Only host can reorder players');
+    }
+    if (room.status !== GameStatus.WAITING) {
+      throw new BadRequestException('Cannot reorder during a game');
+    }
+    const existing = new Set(room.players.map((p) => p.id));
+    if (orderedIds.length !== room.players.length || !orderedIds.every((id) => existing.has(id))) {
+      throw new BadRequestException('Invalid player order');
+    }
+    const map = new Map(room.players.map((p) => [p.id, p]));
+    room.players = orderedIds.map((id, i) => {
+      const p = map.get(id)!;
+      p.seatIndex = i;
+      return p;
+    });
+    return room;
+  }
+
+  private reindexSeats(room: LobbyRoom): void {
+    room.players.forEach((p, i) => { p.seatIndex = i; });
+  }
+
   startGame(roomId: string, requesterId: string): { gameId: string } {
     const room = this.getRoom(roomId);
     if (room.hostId !== requesterId) {

@@ -18,6 +18,9 @@ interface LobbyState {
   joinRoom: (req: JoinRoomRequest) => Promise<void>;
   leaveRoom: (roomId: string) => Promise<void>;
   addAi: (roomId: string, seatIndex?: number) => void;
+  kickPlayer: (roomId: string, targetId: string) => void;
+  removeAi: (roomId: string, targetId: string) => void;
+  reorderPlayers: (roomId: string, orderedIds: string[]) => void;
   startGame: (roomId: string) => void;
   sendChat: (roomId: string, message: string) => void;
   spectateRoom: (roomId: string) => void;
@@ -142,6 +145,18 @@ export const useLobbyStore = create<LobbyState>((set, get) => ({
 
   addAi: (roomId, seatIndex) => {
     getSocket()?.emit(WS_EVENTS.ROOM_ADD_AI, { roomId, seatIndex });
+  },
+
+  kickPlayer: (roomId, targetId) => {
+    getSocket()?.emit(WS_EVENTS.ROOM_KICK, { roomId, targetId });
+  },
+
+  removeAi: (roomId, targetId) => {
+    getSocket()?.emit(WS_EVENTS.ROOM_REMOVE_AI, { roomId, targetId });
+  },
+
+  reorderPlayers: (roomId, orderedIds) => {
+    getSocket()?.emit(WS_EVENTS.ROOM_REORDER, { roomId, orderedIds });
   },
 
   startGame: (roomId) => {

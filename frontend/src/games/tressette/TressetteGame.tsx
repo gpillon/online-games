@@ -44,7 +44,7 @@ export function TressetteGame({ gameId }: GameViewProps) {
   const playedEndSoundRef = useRef(false);
   const [announcements, setAnnouncements] = useState<FloatingAnnouncement[]>([]);
   const prevDeclCountRef = useRef(0);
-  const pendingDecl = useGameStore((s) => s.pendingDeclaration);
+  const pendingDecls = useGameStore((s) => s.pendingDeclarations);
   const [drawnCardsDisplay, setDrawnCardsDisplay] = useState<{ playerId: string; playerName: string; card: Card }[] | null>(null);
   const prevDrawnRef = useRef<string | null>(null);
 
@@ -171,60 +171,66 @@ export function TressetteGame({ gameId }: GameViewProps) {
     : false;
 
   const center = (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex max-w-full flex-col items-center gap-2 overflow-hidden px-1 sm:gap-4 sm:px-0">
       <TrickArea
         trick={client.currentTrick}
         mySeatIndex={mySeat}
         numPlayers={numPlayers}
         trickWinnerSeat={trickWinnerSeat}
       />
-      {client.canDeclare && availableDeclarations.length > 0 && !pendingDecl && (
-        <GlassPanel className="flex flex-wrap items-center justify-center gap-4 px-6 py-4">
-          <span className="mb-1 w-full text-center font-display text-base text-gold">Dichiarazioni</span>
-          {availableDeclarations.includes(OG.TressetteDeclarationType.NAPOLETANA) && (
-            <Button
-              type="button"
-              variant="secondary"
-              className="text-xs"
-              onClick={() => sendDeclaration(OG.TressetteDeclarationType.NAPOLETANA, [])}
-            >
-              Napoletana
-            </Button>
-          )}
-          {availableDeclarations.includes(OG.TressetteDeclarationType.BONGIOCO) && (
-            <Button
-              type="button"
-              variant="ghost"
-              className="text-xs"
-              onClick={() => sendDeclaration(OG.TressetteDeclarationType.BONGIOCO, [])}
-            >
-              Buon gioco
-            </Button>
-          )}
-        </GlassPanel>
-      )}
-      {pendingDecl && (
+      {(() => {
+        const pendingTypes = new Set(pendingDecls.map((d) => d.type));
+        const remaining = availableDeclarations.filter((t) => !pendingTypes.has(t as OG.TressetteDeclarationType));
+        return client.canDeclare && remaining.length > 0 ? (
+          <GlassPanel className="flex max-w-full flex-wrap items-center justify-center gap-2 px-3 py-3 sm:gap-4 sm:px-6 sm:py-4">
+            <span className="mb-1 w-full text-center font-display text-sm text-gold sm:text-base">Dichiarazioni</span>
+            {remaining.includes(OG.TressetteDeclarationType.NAPOLETANA) && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="text-xs"
+                onClick={() => sendDeclaration(OG.TressetteDeclarationType.NAPOLETANA, [])}
+              >
+                Napoletana
+              </Button>
+            )}
+            {remaining.includes(OG.TressetteDeclarationType.BONGIOCO) && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-xs"
+                onClick={() => sendDeclaration(OG.TressetteDeclarationType.BONGIOCO, [])}
+              >
+                Buon gioco
+              </Button>
+            )}
+          </GlassPanel>
+        ) : null;
+      })()}
+      {pendingDecls.length > 0 && (
         <motion.div
-          className="rounded-full bg-gradient-to-r from-gold/80 to-amber-500/80 px-5 py-2 font-display text-sm font-bold text-black shadow-lg"
+          className="max-w-[min(100%,18rem)] rounded-full bg-gradient-to-r from-gold/80 to-amber-500/80 px-3 py-1.5 text-center font-display text-xs font-bold text-black shadow-lg sm:max-w-none sm:px-5 sm:py-2 sm:text-sm"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: [1, 1.05, 1] }}
           transition={{ duration: 1.5, repeat: Infinity }}
         >
-          {pendingDecl.type === OG.TressetteDeclarationType.NAPOLETANA ? 'Napoletana' : 'Buon gioco'} — gioca una carta!
+          {pendingDecls.map((d) => d.type === OG.TressetteDeclarationType.NAPOLETANA ? 'Napoletana' : 'Buon gioco').join(' + ')} — gioca una carta!
         </motion.div>
       )}
     </div>
   );
 
   return (
-    <div className={`mx-auto flex max-w-6xl flex-col gap-6 px-3 pt-4 md:px-4 ${isSpectator ? 'pb-8' : 'pb-28'}`}>
+    <div
+      className={`mx-auto flex max-w-6xl flex-col gap-3 overflow-x-hidden px-2 pt-3 sm:gap-6 sm:px-3 sm:pt-4 md:px-4 ${isSpectator ? 'pb-6 sm:pb-8' : 'pb-20 sm:pb-28'}`}
+    >
       {/* Declaration announcements */}
-      <div className="pointer-events-none fixed left-1/2 top-24 z-[60] -translate-x-1/2">
+      <div className="pointer-events-none fixed left-1/2 top-16 z-[60] w-[calc(100%-1rem)] max-w-lg -translate-x-1/2 px-2 sm:top-24 sm:w-auto sm:max-w-none sm:px-0">
         <AnimatePresence>
           {announcements.map((a) => (
             <motion.div
               key={a.id}
-              className="mb-3 whitespace-nowrap rounded-full bg-gradient-to-r from-gold/90 to-amber-500/90 px-6 py-2 font-display text-sm font-bold tracking-wide text-black shadow-xl shadow-gold/30"
+              className="mb-2 rounded-full bg-gradient-to-r from-gold/90 to-amber-500/90 px-3 py-1.5 text-center font-display text-xs font-bold tracking-wide text-black shadow-xl shadow-gold/30 sm:mb-3 sm:whitespace-nowrap sm:px-6 sm:py-2 sm:text-sm"
               initial={{ opacity: 0, y: -30, scale: 0.8 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.8 }}
@@ -253,12 +259,16 @@ export function TressetteGame({ gameId }: GameViewProps) {
               exit={{ scale: 0.8, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 260, damping: 22 }}
             >
-              <p className="font-display text-2xl text-gold">Carte pescate</p>
-              <div className="flex items-center gap-10">
+              <p className="px-2 text-center font-display text-xl text-gold sm:text-2xl">Carte pescate</p>
+              <div className="flex max-w-full flex-wrap items-center justify-center gap-6 px-2 sm:gap-10">
                 {drawnCardsDisplay.map((d) => (
-                  <div key={d.card.id} className="flex flex-col items-center gap-3">
-                    <CardComponent card={d.card} width={100} height={142} disabled />
-                    <span className="font-display text-sm text-ivory/90">{d.playerName}</span>
+                  <div key={d.card.id} className="flex flex-col items-center gap-2 sm:gap-3">
+                    <div className="origin-center scale-[0.82] sm:scale-100">
+                      <CardComponent card={d.card} width={100} height={142} disabled />
+                    </div>
+                    <span className="max-w-[10rem] truncate text-center font-display text-xs text-ivory/90 sm:max-w-none sm:text-sm">
+                      {d.playerName}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -292,12 +302,14 @@ export function TressetteGame({ gameId }: GameViewProps) {
       </AnimatePresence>
 
       {isSpectator && (
-        <GlassPanel className="flex items-center justify-center gap-2 px-4 py-2 text-center">
-          <Eye className="h-4 w-4 text-gold/70" />
-          <span className="font-display text-sm text-gold/80">Stai guardando la partita come spettatore</span>
+        <GlassPanel className="flex items-center justify-center gap-2 px-3 py-2 text-center sm:px-4">
+          <Eye className="h-4 w-4 shrink-0 text-gold/70" />
+          <span className="font-display text-xs leading-snug text-gold/80 sm:text-sm">
+            Stai guardando la partita come spettatore
+          </span>
         </GlassPanel>
       )}
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
         <ScoreBoard
           teamA={client.teamScores[0]}
           teamB={client.teamScores[1]}
@@ -307,10 +319,31 @@ export function TressetteGame({ gameId }: GameViewProps) {
           handLabel={`Modalità ${client.mode}`}
           targetScore={client.targetScore}
         />
-        <GlassPanel className="px-4 py-2 font-body text-sm text-gold/80">
-          <span className="font-display text-gold">Tressette</span> — mazzo residuo: {client.deckRemaining}
+        <GlassPanel className="min-w-0 px-3 py-2 font-body text-xs text-gold/80 sm:px-4 sm:text-sm">
+          <span className="font-display text-gold">Tressette</span>
+          {client.mode === OG.TressetteMode.TWO_PLAYERS && (
+            <>
+              {' '}
+              <span className="block sm:inline">— mazzo residuo: {client.deckRemaining}</span>
+            </>
+          )}
         </GlassPanel>
       </div>
+
+      {client.mortoHand && client.mortoHand.length > 0 && (
+        <GlassPanel className="max-w-full overflow-hidden px-3 py-2 sm:px-4 sm:py-3">
+          <p className="mb-2 text-center font-display text-xs text-gold sm:text-sm">
+            Carte del Morto ({client.mortoHand.length})
+          </p>
+          <div className="flex max-w-full flex-wrap justify-center gap-0.5 sm:gap-1">
+            {client.mortoHand.map((card) => (
+              <div key={card.id} className="origin-top shrink-0 scale-[0.88] sm:scale-100">
+                <CardComponent card={card} width={56} height={80} disabled />
+              </div>
+            ))}
+          </div>
+        </GlassPanel>
+      )}
 
       <GameTable
         numPlayers={numPlayers}
@@ -386,7 +419,7 @@ export function TressetteGame({ gameId }: GameViewProps) {
         <AnimatePresence>
           {statusPlaying && (
             <motion.div
-              className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-6 pt-10"
+              className="fixed bottom-0 left-0 right-0 z-40 flex justify-center overflow-x-hidden pb-3 pt-6 sm:pb-6 sm:pt-10"
               initial={{ y: 80, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 80, opacity: 0 }}

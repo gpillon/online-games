@@ -37,6 +37,11 @@ export const WS_EVENTS = {
   // Spectator
   ROOM_SPECTATE: 'room:spectate',
 
+  // Room management
+  ROOM_KICK: 'room:kick',
+  ROOM_REORDER: 'room:reorder',
+  ROOM_REMOVE_AI: 'room:remove_ai',
+
   // Errors
   ERROR: 'error',
 } as const;

@@ -240,6 +240,41 @@ export class LobbyGateway
     return { room };
   }
 
+  @SubscribeMessage(WS_EVENTS.ROOM_KICK)
+  handleKick(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string; targetId: string },
+  ) {
+    const userId = client.data.userId as string;
+    const room = this.lobbyService.kickPlayer(body.roomId, userId, body.targetId);
+    this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_UPDATE, room);
+    this.emitRoomsUpdate();
+    return { room };
+  }
+
+  @SubscribeMessage(WS_EVENTS.ROOM_REMOVE_AI)
+  handleRemoveAi(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string; targetId: string },
+  ) {
+    const userId = client.data.userId as string;
+    const room = this.lobbyService.removeAI(body.roomId, userId, body.targetId);
+    this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_UPDATE, room);
+    this.emitRoomsUpdate();
+    return { room };
+  }
+
+  @SubscribeMessage(WS_EVENTS.ROOM_REORDER)
+  handleReorder(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string; orderedIds: string[] },
+  ) {
+    const userId = client.data.userId as string;
+    const room = this.lobbyService.reorderPlayers(body.roomId, userId, body.orderedIds);
+    this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_UPDATE, room);
+    return { room };
+  }
+
   @SubscribeMessage(WS_EVENTS.ROOM_START_GAME)
   async handleStartGame(
     @ConnectedSocket() client: Socket,
@@ -319,6 +354,7 @@ export class LobbyGateway
       type?: string;
       data?: Record<string, unknown>;
       declaration?: { type: string; cardIds: string[] };
+      declarations?: { type: string; cardIds: string[] }[];
     },
   ) {
     const userId = client.data.userId as string;
@@ -341,8 +377,13 @@ export class LobbyGateway
         (body.type === 'play_card'
           ? { type: 'play', cardId: (body.data as { cardId: string })?.cardId }
           : body.data);
-      if (body.declaration && move && typeof move === 'object') {
-        (move as Record<string, unknown>).declaration = body.declaration;
+      if (move && typeof move === 'object') {
+        if (body.declaration) {
+          (move as Record<string, unknown>).declaration = body.declaration;
+        }
+        if (body.declarations) {
+          (move as Record<string, unknown>).declarations = body.declarations;
+        }
       }
       const result = engine.makeMove(userId, move);
       if (!result.success) {
@@ -532,14 +573,27 @@ export class LobbyGateway
       if (engine.getCurrentPlayerId() !== expectedPlayer) return;
       this.logger.debug(`AI turn: ${expectedPlayer} in game ${gameId}`);
       const state = engine.getClientState(expectedPlayer);
-      const move = this.ai.chooseMove(state, expectedPlayer);
+      const move = this.ai.chooseMove(state, expectedPlayer) as Record<string, unknown>;
       this.logger.debug(`AI move: ${JSON.stringify(move)}`);
+      const aiChat = move.chat as string | undefined;
       const result = engine.makeMove(expectedPlayer, move);
       if (!result.success) {
         this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_ERROR, {
           message: result.error,
         });
         return;
+      }
+      if (aiChat) {
+        const room = this.lobbyService.getRoom(roomId);
+        const aiPlayer = room.players.find((p) => p.id === expectedPlayer);
+        this.server.to(`room:${roomId}`).emit(WS_EVENTS.ROOM_CHAT_MESSAGE, {
+          id: `ai-${Date.now()}-${expectedPlayer}`,
+          roomId,
+          userId: expectedPlayer,
+          username: aiPlayer?.name ?? 'Bot',
+          message: aiChat,
+          timestamp: new Date().toISOString(),
+        });
       }
       this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_MOVE_RESULT, {
         userId: expectedPlayer,

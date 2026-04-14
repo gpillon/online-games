@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { CardComponent } from '@/components/game/CardComponent';
+import { useViewportWidth } from '@/hooks/useViewportWidth';
 
 export type OpponentOrientation = 'top' | 'left' | 'right';
 
@@ -8,9 +9,6 @@ export interface OpponentHandProps {
   orientation: OpponentOrientation;
 }
 
-const CARD_W = 64;
-const CARD_H = 90;
-
 const rotate: Record<OpponentOrientation, number> = {
   top: 180,
   left: 90,
@@ -18,8 +16,14 @@ const rotate: Record<OpponentOrientation, number> = {
 };
 
 export function OpponentHand({ count, orientation }: OpponentHandProps) {
+  const vw = useViewportWidth();
+  const narrow = vw < 640;
+  const CARD_W = narrow ? 52 : 64;
+  const CARD_H = narrow ? 74 : 90;
+
   const n = Math.min(Math.max(count, 0), 10);
-  const overlap = orientation === 'top' ? 24 : 18;
+  const overlap =
+    orientation === 'top' ? (narrow ? 18 : 24) : narrow ? 14 : 18;
   const spread = (n - 1) * overlap + CARD_W;
 
   return (

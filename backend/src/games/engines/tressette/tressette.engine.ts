@@ -21,13 +21,16 @@ import {
   MoveResult,
 } from '../../interfaces/game-engine.interface';
 
+type DeclarationPayload = {
+  type: TressetteDeclarationType;
+  cardIds: string[];
+};
+
 type TressettePlayMove = {
   type: 'play';
   cardId: string;
-  declaration?: {
-    type: TressetteDeclarationType;
-    cardIds: string[];
-  };
+  declaration?: DeclarationPayload;
+  declarations?: DeclarationPayload[];
 };
 
 function rankStrength(rank: Rank): number {
@@ -61,13 +64,16 @@ export class TressetteEngine implements IGameEngine {
   private lastTrick: TrickCard[] | undefined;
   private tricksWon: Record<string, Card[][]> = {};
   private teamScores: [number, number] = [0, 0];
+  private handStartScores: [number, number] = [0, 0];
   private declarations: TressetteDeclaration[] = [];
   private dealerSeat = 0;
   private currentSeat = 0;
   private handNumber = 0;
   private trickInHand = 0;
   private hasPlayedCardThisHand: Record<string, boolean> = {};
-  private declaredPlayers: Set<string> = new Set();
+  private declaredThisHand: Record<string, Set<TressetteDeclarationType>> = {};
+  private mortoHand: Card[] = [];
+  private mortoPlayerId: string | null = null;
   private lastTrickWinnerPlayerId: string | null = null;
   private lastDrawnCards: { playerId: string; card: Card }[] = [];
   private createdAt = new Date().toISOString();
@@ -99,6 +105,7 @@ export class TressetteEngine implements IGameEngine {
         ]),
       ),
       teamScores: [...this.teamScores] as [number, number],
+      handStartScores: [...this.handStartScores] as [number, number],
       declarations: this.declarations.map((d) => ({
         ...d,
         cards: d.cards.map((c) => ({ ...c })),
@@ -108,7 +115,11 @@ export class TressetteEngine implements IGameEngine {
       handNumber: this.handNumber,
       trickInHand: this.trickInHand,
       hasPlayedCardThisHand: { ...this.hasPlayedCardThisHand },
-      declaredPlayers: [...this.declaredPlayers],
+      declaredThisHand: Object.fromEntries(
+        Object.entries(this.declaredThisHand).map(([k, v]) => [k, [...v]]),
+      ),
+      mortoHand: this.mortoHand.map((c) => ({ ...c })),
+      mortoPlayerId: this.mortoPlayerId,
       lastTrickWinnerPlayerId: this.lastTrickWinnerPlayerId,
       lastDrawnCards: this.lastDrawnCards.map((d) => ({ playerId: d.playerId, card: { ...d.card } })),
       createdAt: this.createdAt,
@@ -163,6 +174,9 @@ export class TressetteEngine implements IGameEngine {
     if (Array.isArray(s.teamScores) && s.teamScores.length === 2) {
       this.teamScores = [Number(s.teamScores[0]), Number(s.teamScores[1])];
     }
+    if (Array.isArray(s.handStartScores) && s.handStartScores.length === 2) {
+      this.handStartScores = [Number(s.handStartScores[0]), Number(s.handStartScores[1])];
+    }
     if (Array.isArray(s.declarations)) {
       this.declarations = (s.declarations as TressetteDeclaration[]).map((d) => ({
         ...d,
@@ -176,8 +190,22 @@ export class TressetteEngine implements IGameEngine {
     if (s.hasPlayedCardThisHand && typeof s.hasPlayedCardThisHand === 'object') {
       this.hasPlayedCardThisHand = { ...(s.hasPlayedCardThisHand as Record<string, boolean>) };
     }
-    if (Array.isArray(s.declaredPlayers)) {
-      this.declaredPlayers = new Set(s.declaredPlayers as string[]);
+    if (s.declaredThisHand && typeof s.declaredThisHand === 'object') {
+      this.declaredThisHand = {};
+      for (const [k, v] of Object.entries(s.declaredThisHand as Record<string, string[]>)) {
+        this.declaredThisHand[k] = new Set(v as TressetteDeclarationType[]);
+      }
+    } else if (Array.isArray(s.declaredPlayers)) {
+      this.declaredThisHand = {};
+      for (const pid of s.declaredPlayers as string[]) {
+        this.declaredThisHand[pid] = new Set([TressetteDeclarationType.NAPOLETANA, TressetteDeclarationType.BONGIOCO]);
+      }
+    }
+    if (Array.isArray(s.mortoHand)) {
+      this.mortoHand = (s.mortoHand as Card[]).map((c) => ({ ...c }));
+    }
+    if (s.mortoPlayerId === null || typeof s.mortoPlayerId === 'string') {
+      this.mortoPlayerId = s.mortoPlayerId as string | null;
     }
     if (s.lastTrickWinnerPlayerId === null || typeof s.lastTrickWinnerPlayerId === 'string') {
       this.lastTrickWinnerPlayerId = s.lastTrickWinnerPlayerId as string | null;
@@ -307,9 +335,13 @@ export class TressetteEngine implements IGameEngine {
       declarations: [...this.declarations],
       canDeclare:
         !this.hasPlayedCardThisHand[playerId] &&
-        !this.declaredPlayers.has(playerId) &&
-        this.trickInHand === 0,
+        this.trickInHand === 0 &&
+        this.computeAvailableDeclarations(playerId).length > 0,
       availableDeclarations: this.computeAvailableDeclarations(playerId),
+      mortoHand:
+        this.mode === TressetteMode.THREE_WITH_MORTO
+          ? [...this.mortoHand]
+          : undefined,
       drawnCards:
         this.mode === TressetteMode.TWO_PLAYERS && this.lastDrawnCards.length > 0
           ? this.lastDrawnCards.map((d) => ({ playerId: d.playerId, card: { ...d.card } }))
@@ -318,35 +350,36 @@ export class TressetteEngine implements IGameEngine {
   }
 
   private computeAvailableDeclarations(playerId: string): TressetteDeclarationType[] {
-    if (
-      this.hasPlayedCardThisHand[playerId] ||
-      this.declaredPlayers.has(playerId) ||
-      this.trickInHand !== 0
-    ) {
+    if (this.hasPlayedCardThisHand[playerId] || this.trickInHand !== 0) {
       return [];
     }
+    const already = this.declaredThisHand[playerId] ?? new Set();
     const hand = this.hands[playerId] ?? [];
     if (hand.length === 0) return [];
     const available: TressetteDeclarationType[] = [];
 
-    const bySuit = new Map<Suit, Card[]>();
-    for (const c of hand) {
-      const arr = bySuit.get(c.suit) ?? [];
-      arr.push(c);
-      bySuit.set(c.suit, arr);
-    }
-    for (const cards of bySuit.values()) {
-      const ranks = new Set(cards.map((c) => c.rank));
-      if (ranks.has(Rank.ASSO) && ranks.has(Rank.DUE) && ranks.has(Rank.TRE)) {
-        available.push(TressetteDeclarationType.NAPOLETANA);
-        break;
+    if (!already.has(TressetteDeclarationType.NAPOLETANA)) {
+      const bySuit = new Map<Suit, Card[]>();
+      for (const c of hand) {
+        const arr = bySuit.get(c.suit) ?? [];
+        arr.push(c);
+        bySuit.set(c.suit, arr);
+      }
+      for (const cards of bySuit.values()) {
+        const ranks = new Set(cards.map((c) => c.rank));
+        if (ranks.has(Rank.ASSO) && ranks.has(Rank.DUE) && ranks.has(Rank.TRE)) {
+          available.push(TressetteDeclarationType.NAPOLETANA);
+          break;
+        }
       }
     }
 
-    for (const r of [Rank.ASSO, Rank.DUE, Rank.TRE]) {
-      if (hand.filter((c) => c.rank === r).length >= 3) {
-        available.push(TressetteDeclarationType.BONGIOCO);
-        break;
+    if (!already.has(TressetteDeclarationType.BONGIOCO)) {
+      for (const r of [Rank.ASSO, Rank.DUE, Rank.TRE]) {
+        if (hand.filter((c) => c.rank === r).length >= 3) {
+          available.push(TressetteDeclarationType.BONGIOCO);
+          break;
+        }
       }
     }
 
@@ -405,14 +438,15 @@ export class TressetteEngine implements IGameEngine {
       }
     }
 
-    if (m.declaration) {
-      if (!m.declaration.cardIds || m.declaration.cardIds.length === 0) {
-        m.declaration.cardIds = this.autoSelectDeclarationCards(
-          m.declaration.type,
-          hand,
-        );
+    const allDecls: DeclarationPayload[] = [
+      ...(m.declarations ?? []),
+      ...(m.declaration ? [m.declaration] : []),
+    ];
+    for (const decl of allDecls) {
+      if (!decl.cardIds || decl.cardIds.length === 0) {
+        decl.cardIds = this.autoSelectDeclarationCards(decl.type, hand);
       }
-      const declErr = this.validateDeclaration(playerId, m.declaration, hand);
+      const declErr = this.validateDeclaration(playerId, decl, hand);
       if (declErr) return { success: false, error: declErr };
     }
 
@@ -422,9 +456,12 @@ export class TressetteEngine implements IGameEngine {
 
     this.lastDrawnCards = [];
 
-    if (m.declaration) {
-      this.recordDeclaration(playerId, m.declaration, hand);
-      this.declaredPlayers.add(playerId);
+    for (const decl of allDecls) {
+      this.recordDeclaration(playerId, decl, hand);
+      if (!this.declaredThisHand[playerId]) {
+        this.declaredThisHand[playerId] = new Set();
+      }
+      this.declaredThisHand[playerId].add(decl.type);
     }
 
     hand.splice(cardIndex, 1);
@@ -515,7 +552,7 @@ export class TressetteEngine implements IGameEngine {
       if (this.mode === TressetteMode.FOUR_PLAYERS) {
         p.team = p.seatIndex % 2 === 0 ? 0 : 1;
       } else if (this.mode === TressetteMode.THREE_WITH_MORTO) {
-        p.team = p.seatIndex === 0 ? 0 : 1;
+        p.team = p.seatIndex === this.dealerSeat ? 0 : 1;
       } else {
         p.team = p.seatIndex;
       }
@@ -537,15 +574,18 @@ export class TressetteEngine implements IGameEngine {
     this.currentTrick = [];
     this.trickInHand = 0;
     this.hasPlayedCardThisHand = {};
-    this.declaredPlayers.clear();
+    this.declaredThisHand = {};
     this.lastDrawnCards = [];
+    this.handStartScores = [...this.teamScores] as [number, number];
     for (const p of this.players) {
       this.tricksWon[p.id] = this.tricksWon[p.id] ?? [];
     }
 
-    let deck = shuffleDeck(createDeck());
+    const deck = shuffleDeck(createDeck());
     this.stock = [];
     this.mortoCard = null;
+    this.mortoHand = [];
+    this.mortoPlayerId = null;
 
     if (this.mode === TressetteMode.TWO_PLAYERS) {
       for (const p of this.players) {
@@ -553,10 +593,13 @@ export class TressetteEngine implements IGameEngine {
       }
       this.stock = deck;
     } else if (this.mode === TressetteMode.THREE_WITH_MORTO) {
+      const dealer = this.playerAtSeat(this.dealerSeat);
+      this.mortoPlayerId = `morto_${dealer.id}`;
       for (const p of this.players) {
-        this.hands[p.id] = deck.splice(0, 13);
+        this.hands[p.id] = deck.splice(0, 10);
       }
-      this.mortoCard = deck.pop() ?? null;
+      this.mortoHand = deck.splice(0, 10);
+      this.hands[this.mortoPlayerId] = this.mortoHand;
     } else {
       for (const p of this.players) {
         this.hands[p.id] = deck.splice(0, 10);
@@ -589,11 +632,16 @@ export class TressetteEngine implements IGameEngine {
   }
 
   private awardTrick(winnerId: string, cards: Card[]): void {
+    if (!this.tricksWon[winnerId]) this.tricksWon[winnerId] = [];
     this.tricksWon[winnerId].push(cards);
-    const winner = this.players.find((p) => p.id === winnerId)!;
+    const winner = this.players.find((p) => p.id === winnerId);
     const pts = trickPoints(cards);
-    const team = this.teamIndexForSeat(winner.seatIndex);
-    this.teamScores[team] += pts;
+    if (winner) {
+      const team = this.teamIndexForSeat(winner.seatIndex);
+      this.teamScores[team] += pts;
+    } else if (this.mortoPlayerId && winnerId === this.mortoPlayerId) {
+      this.teamScores[0] += pts;
+    }
   }
 
   private drawFromStock(winnerId: string): void {
@@ -610,22 +658,23 @@ export class TressetteEngine implements IGameEngine {
   }
 
   private isHandComplete(): boolean {
-    return this.players.every((p) => (this.hands[p.id] ?? []).length === 0);
+    const playersEmpty = this.players.every((p) => (this.hands[p.id] ?? []).length === 0);
+    if (this.mode === TressetteMode.THREE_WITH_MORTO && this.mortoPlayerId) {
+      return playersEmpty && (this.hands[this.mortoPlayerId] ?? []).length === 0;
+    }
+    return playersEmpty;
   }
 
   private finishHand(): void {
-    if (
-      this.mode === TressetteMode.THREE_WITH_MORTO &&
-      this.mortoCard &&
-      this.lastTrickWinnerPlayerId
-    ) {
-      const lastWinnerId = this.lastTrickWinnerPlayerId;
-      this.tricksWon[lastWinnerId].push([this.mortoCard]);
-      const winner = this.players.find((p) => p.id === lastWinnerId)!;
-      const team = this.teamIndexForSeat(winner.seatIndex);
-      this.teamScores[team] += cardPoints(this.mortoCard);
-      this.mortoCard = null;
+    if (this.lastTrickWinnerPlayerId) {
+      const winner = this.players.find((p) => p.id === this.lastTrickWinnerPlayerId);
+      if (winner) {
+        const team = this.teamIndexForSeat(winner.seatIndex);
+        this.teamScores[team] += 1;
+      }
     }
+    this.teamScores[0] = Math.floor(this.teamScores[0]);
+    this.teamScores[1] = Math.floor(this.teamScores[1]);
   }
 
   private checkGameEnd(): boolean {
@@ -669,8 +718,9 @@ export class TressetteEngine implements IGameEngine {
     if (this.hasPlayedCardThisHand[playerId]) {
       return 'Declaration only before your first card';
     }
-    if (this.declaredPlayers.has(playerId)) {
-      return 'Already declared this hand';
+    const already = this.declaredThisHand[playerId] ?? new Set();
+    if (already.has(decl.type)) {
+      return `Already declared ${decl.type} this hand`;
     }
     if (this.trickInHand !== 0) {
       return 'Declarations only on the first trick of the hand';
@@ -765,6 +815,10 @@ export class TressetteEngine implements IGameEngine {
       drawnCards:
         this.mode === TressetteMode.TWO_PLAYERS && this.lastDrawnCards.length > 0
           ? this.lastDrawnCards.map((d) => ({ playerId: d.playerId, card: { ...d.card } }))
+          : undefined,
+      mortoHand:
+        this.mode === TressetteMode.THREE_WITH_MORTO
+          ? [...this.mortoHand]
           : undefined,
     };
   }
