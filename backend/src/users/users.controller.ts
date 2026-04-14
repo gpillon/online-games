@@ -1,5 +1,5 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, ForbiddenException, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserEntity } from './entities/user.entity';
@@ -7,6 +7,7 @@ import { HeadToHeadEntity } from './entities/head-to-head.entity';
 import { HeadToHeadRecordDto } from './dto/head-to-head-record.dto';
 import { LeaderboardQueryDto } from './dto/leaderboard-query.dto';
 import { UserStatsParamDto } from './dto/user-stats-param.dto';
+import { UpdateUsernameDto } from './dto/update-username.dto';
 import { UsersService } from './users.service';
 
 @ApiTags('users')
@@ -20,6 +21,20 @@ export class UsersController {
   async profile(@CurrentUser() user: UserEntity) {
     const stats = await this.usersService.buildStats(user.id);
     return this.usersService.toProfile(user, stats);
+  }
+
+  @Patch('username')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdateUsernameDto })
+  @ApiOkResponse({ description: 'Updated user profile' })
+  async updateUsername(@CurrentUser() user: UserEntity, @Body() body: UpdateUsernameDto) {
+    if (!user.isAnonymous) {
+      throw new ForbiddenException('Only anonymous users may change their username');
+    }
+    const updated = await this.usersService.updateUsername(user.id, body.username);
+    const stats = await this.usersService.buildStats(updated.id);
+    return this.usersService.toProfile(updated, stats);
   }
 
   @Get('leaderboard')

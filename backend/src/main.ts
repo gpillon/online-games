@@ -2,12 +2,15 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
+  app.useStaticAssets(join(__dirname, '..', 'public'));
   const port = parseInt(config.get<string>('PORT') ?? '3001', 10);
   const frontendUrl = config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
 

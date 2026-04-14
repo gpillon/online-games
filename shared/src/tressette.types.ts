@@ -41,6 +41,7 @@ export interface TressetteClientState {
   trickWinner?: string;
   declarations?: TressetteDeclaration[];
   canDeclare?: boolean;
+  availableDeclarations?: TressetteDeclarationType[];
 }
 
 export interface TressettePlayerInfo {
@@ -69,8 +70,8 @@ export interface TressetteDeclaration {
 }
 
 export enum TressetteDeclarationType {
-  NAPOLETANA = 'napoletana', // A, 2, 3 of same suit
-  BONGIOCO = 'bongioco', // 3+ cards value >= 1 each (A, 2, 3)
+  NAPOLETANA = 'napoletana', // A, 2, 3 of same suit → 3 points
+  BONGIOCO = 'bongioco', // 3 cards of same rank (A/2/3) → 4 points
 }
 
 export const TRESSETTE_CARD_ORDER: number[] = [3, 2, 1, 10, 9, 8, 7, 6, 5, 4];

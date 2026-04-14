@@ -1,4 +1,4 @@
-import type { TressetteClientState } from '@online-games/shared';
+import type { TressetteClientState, TressetteDeclarationType } from '@online-games/shared';
 import * as OG from '@online-games/shared';
 import { WS_EVENTS } from '@/lib/wsEvents';
 import { create } from 'zustand';
@@ -10,13 +10,13 @@ interface GameState {
   gameType: OG.GameType | null;
   clientState: TressetteClientState | null;
   error: string | null;
-  /** Optional hints from server for playable cards */
   validCardIds: string[] | null;
   lastTrickModalOpen: boolean;
+  pendingDeclaration: { type: TressetteDeclarationType; cardIds: string[] } | null;
   setLastTrickModalOpen: (open: boolean) => void;
   bindGameEvents: (gameId: string, gameType?: OG.GameType) => () => void;
   playCard: (cardId: string) => void;
-  sendDeclaration: (type: string, cardIds: string[]) => void;
+  sendDeclaration: (type: TressetteDeclarationType, cardIds: string[]) => void;
   clearGame: () => void;
 }
 
@@ -27,6 +27,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   error: null,
   validCardIds: null,
   lastTrickModalOpen: false,
+  pendingDeclaration: null,
 
   setLastTrickModalOpen: (open) => set({ lastTrickModalOpen: open }),
 
@@ -38,30 +39,28 @@ export const useGameStore = create<GameState>((set, get) => ({
       error: null,
       validCardIds: null,
       lastTrickModalOpen: false,
+      pendingDeclaration: null,
     }),
 
   playCard: (cardId) => {
-    const { gameId } = get();
+    const { gameId, pendingDeclaration } = get();
     const token = useAuthStore.getState().token;
     if (!gameId) return;
-    getSocket()?.emit(WS_EVENTS.GAME_MOVE, {
+    const payload: Record<string, unknown> = {
       gameId,
       token,
       type: 'play_card',
       data: { cardId },
-    });
+    };
+    if (pendingDeclaration) {
+      payload.declaration = pendingDeclaration;
+      set({ pendingDeclaration: null });
+    }
+    getSocket()?.emit(WS_EVENTS.GAME_MOVE, payload);
   },
 
   sendDeclaration: (type, cardIds) => {
-    const { gameId } = get();
-    const token = useAuthStore.getState().token;
-    if (!gameId) return;
-    getSocket()?.emit(WS_EVENTS.GAME_DECLARATION, {
-      gameId,
-      token,
-      type,
-      data: { cardIds },
-    });
+    set({ pendingDeclaration: { type, cardIds } });
   },
 
   bindGameEvents: (gameId: string, gameType: OG.GameType = OG.GameType.TRESSETTE) => {

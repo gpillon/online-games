@@ -1,7 +1,7 @@
 import type { TressettePlayerInfo } from '@online-games/shared';
 import * as OG from '@online-games/shared';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Eye } from 'lucide-react';
+import { Eye, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GameTable, type TableSeat } from '@/components/game/GameTable';
@@ -21,6 +21,12 @@ import {
 } from '@/lib/sounds';
 import { useGameStore } from '@/stores/gameStore';
 
+interface FloatingAnnouncement {
+  id: string;
+  text: string;
+  ts: number;
+}
+
 function playerBySeat(players: TressettePlayerInfo[], seat: number | null) {
   if (seat === null) return undefined;
   return players.find((p) => p.seatIndex === seat);
@@ -35,6 +41,9 @@ export function TressetteGame({ gameId }: GameViewProps) {
   const [showStartOverlay, setShowStartOverlay] = useState(true);
   const prevMyTurnRef = useRef(false);
   const playedEndSoundRef = useRef(false);
+  const [announcements, setAnnouncements] = useState<FloatingAnnouncement[]>([]);
+  const prevDeclCountRef = useRef(0);
+  const pendingDecl = useGameStore((s) => s.pendingDeclaration);
 
   const players = client?.players ?? [];
   const numPlayers = Math.max(players.length, 2);
@@ -42,6 +51,7 @@ export function TressetteGame({ gameId }: GameViewProps) {
 
   const mePlayer = client && !isSpectator ? players[client.myIndex] : undefined;
   const mySeat = mePlayer?.seatIndex ?? 0;
+  const myTeam = mePlayer?.team ?? 0;
 
   const currentPlayer = client ? players[client.currentPlayerIndex] : undefined;
   const currentSeat = currentPlayer?.seatIndex ?? -1;
@@ -53,6 +63,11 @@ export function TressetteGame({ gameId }: GameViewProps) {
 
   const teamANames = players.filter((p) => p.team === 0).map((p) => p.name);
   const teamBNames = players.filter((p) => p.team === 1).map((p) => p.name);
+
+  const availableDeclarations = useMemo(() => {
+    if (!client || !client.canDeclare) return [];
+    return (client as unknown as { availableDeclarations?: string[] }).availableDeclarations ?? [];
+  }, [client]);
 
   useEffect(() => {
     if (!client) return;
@@ -84,6 +99,29 @@ export function TressetteGame({ gameId }: GameViewProps) {
     prevMyTurnRef.current = myTurn;
   }, [myTurn]);
 
+  useEffect(() => {
+    const decls = client?.declarations ?? [];
+    if (decls.length > prevDeclCountRef.current) {
+      const newDecls = decls.slice(prevDeclCountRef.current);
+      const newAnnouncements = newDecls.map((d) => {
+        const pName = players.find((p) => p.id === d.playerId)?.name ?? '?';
+        const label = d.type === OG.TressetteDeclarationType.NAPOLETANA ? 'Napoletana' : 'Buon gioco';
+        return {
+          id: `${d.playerId}-${d.type}-${Date.now()}`,
+          text: `${pName}: ${label}! (+${d.points} pt)`,
+          ts: Date.now(),
+        };
+      });
+      setAnnouncements((prev) => [...prev, ...newAnnouncements]);
+      for (const a of newAnnouncements) {
+        setTimeout(() => {
+          setAnnouncements((prev) => prev.filter((x) => x.id !== a.id));
+        }, 4000);
+      }
+    }
+    prevDeclCountRef.current = decls.length;
+  }, [client?.declarations, players]);
+
   if (!client) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 px-4">
@@ -105,6 +143,13 @@ export function TressetteGame({ gameId }: GameViewProps) {
     ? players.find((p) => p.id === client.trickWinner)?.seatIndex
     : undefined;
 
+  const iWon = client.status === OG.GameStatus.FINISHED && !isSpectator && mePlayer
+    ? client.teamScores[myTeam] > client.teamScores[myTeam === 0 ? 1 : 0]
+    : false;
+  const isDraw = client.status === OG.GameStatus.FINISHED
+    ? client.teamScores[0] === client.teamScores[1]
+    : false;
+
   const center = (
     <div className="flex flex-col items-center gap-4">
       <TrickArea
@@ -113,32 +158,64 @@ export function TressetteGame({ gameId }: GameViewProps) {
         numPlayers={numPlayers}
         trickWinnerSeat={trickWinnerSeat}
       />
-      {client.canDeclare && (
+      {client.canDeclare && availableDeclarations.length > 0 && !pendingDecl && (
         <GlassPanel className="flex flex-wrap items-center justify-center gap-4 px-6 py-4">
           <span className="mb-1 w-full text-center font-display text-base text-gold">Dichiarazioni</span>
-          <Button
-            type="button"
-            variant="secondary"
-            className="text-xs"
-            onClick={() => sendDeclaration(OG.TressetteDeclarationType.NAPOLETANA, [])}
-          >
-            Napoletana
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="text-xs"
-            onClick={() => sendDeclaration(OG.TressetteDeclarationType.BONGIOCO, [])}
-          >
-            Buon gioco
-          </Button>
+          {availableDeclarations.includes(OG.TressetteDeclarationType.NAPOLETANA) && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="text-xs"
+              onClick={() => sendDeclaration(OG.TressetteDeclarationType.NAPOLETANA, [])}
+            >
+              Napoletana
+            </Button>
+          )}
+          {availableDeclarations.includes(OG.TressetteDeclarationType.BONGIOCO) && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-xs"
+              onClick={() => sendDeclaration(OG.TressetteDeclarationType.BONGIOCO, [])}
+            >
+              Buon gioco
+            </Button>
+          )}
         </GlassPanel>
+      )}
+      {pendingDecl && (
+        <motion.div
+          className="rounded-full bg-gradient-to-r from-gold/80 to-amber-500/80 px-5 py-2 font-display text-sm font-bold text-black shadow-lg"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: [1, 1.05, 1] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+        >
+          {pendingDecl.type === OG.TressetteDeclarationType.NAPOLETANA ? 'Napoletana' : 'Buon gioco'} — gioca una carta!
+        </motion.div>
       )}
     </div>
   );
 
   return (
     <div className={`mx-auto flex max-w-6xl flex-col gap-6 px-3 pt-4 md:px-4 ${isSpectator ? 'pb-8' : 'pb-28'}`}>
+      {/* Declaration announcements */}
+      <div className="pointer-events-none fixed left-1/2 top-24 z-[60] -translate-x-1/2">
+        <AnimatePresence>
+          {announcements.map((a) => (
+            <motion.div
+              key={a.id}
+              className="mb-3 whitespace-nowrap rounded-full bg-gradient-to-r from-gold/90 to-amber-500/90 px-6 py-2 font-display text-sm font-bold tracking-wide text-black shadow-xl shadow-gold/30"
+              initial={{ opacity: 0, y: -30, scale: 0.8 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.8 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            >
+              {a.text}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
       <AnimatePresence>
         {showStartOverlay && (
           <motion.div
@@ -219,12 +296,34 @@ export function TressetteGame({ gameId }: GameViewProps) {
             animate={{ scale: 1, y: 0 }}
             transition={{ type: 'spring', stiffness: 180, damping: 18 }}
           >
-            <p className="font-display text-5xl text-gradient-gold md:text-6xl">Partita terminata!</p>
-            <p className="mt-4 font-body text-xl text-ivory">
-              {client.teamScores[0]} — {client.teamScores[1]}
-            </p>
+            {!isSpectator && mePlayer && (
+              <div className="mb-4 flex items-center justify-center gap-3">
+                <Trophy className={`h-10 w-10 ${iWon ? 'text-gold' : 'text-gold/30'}`} />
+                <p className={`font-display text-3xl md:text-4xl ${iWon ? 'text-emerald-400' : isDraw ? 'text-gold' : 'text-red-400'}`}>
+                  {isDraw ? 'Pareggio!' : iWon ? 'Hai vinto!' : 'Hai perso!'}
+                </p>
+                <Trophy className={`h-10 w-10 ${iWon ? 'text-gold' : 'text-gold/30'}`} />
+              </div>
+            )}
+            <p className="font-display text-4xl text-gradient-gold md:text-5xl">Partita terminata</p>
+            <div className="mt-4 flex items-center justify-center gap-6">
+              <div className="text-center">
+                <p className="font-body text-xs uppercase tracking-wider text-gold/60">Squadra A</p>
+                <p className="font-display text-3xl text-ivory">{Math.round(client.teamScores[0])}</p>
+              </div>
+              <p className="font-display text-2xl text-gold/40">—</p>
+              <div className="text-center">
+                <p className="font-body text-xs uppercase tracking-wider text-gold/60">Squadra B</p>
+                <p className="font-display text-3xl text-ivory">{Math.round(client.teamScores[1])}</p>
+              </div>
+            </div>
+            {!isSpectator && mePlayer && (
+              <p className="mt-2 font-body text-sm text-gold/60">
+                Tu eri nella <span className="font-display text-gold">{myTeam === 0 ? 'Squadra A' : 'Squadra B'}</span>
+              </p>
+            )}
             <Link to="/lobby">
-              <Button type="button" variant="primary" className="mt-6">
+              <Button type="button" variant="primary" className="mt-6 text-lg">
                 Torna alla sala
               </Button>
             </Link>

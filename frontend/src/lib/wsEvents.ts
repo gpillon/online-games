@@ -29,6 +29,7 @@ export const WS_EVENTS = {
   GAME_DECLARATION: 'game:declaration',
   GAME_PLAYER_RECONNECTED: 'game:player_reconnected',
   GAME_REQUEST_STATE: 'game:request_state',
+  GAME_EMOTE: 'game:emote',
   ROOM_SPECTATE: 'room:spectate',
   ERROR: 'error',
 } as const;

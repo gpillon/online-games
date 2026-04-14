@@ -16,15 +16,15 @@ function layoutForPlayers(
   if (n >= 4) {
     return [
       { slot: 'south', offset: 0 },
-      { slot: 'west', offset: 1 },
+      { slot: 'east', offset: 1 },
       { slot: 'north', offset: 2 },
-      { slot: 'east', offset: 3 },
+      { slot: 'west', offset: 3 },
     ];
   }
   if (n === 3) {
     return [
       { slot: 'south', offset: 0 },
-      { slot: 'west', offset: 1 },
+      { slot: 'east', offset: 1 },
       { slot: 'north', offset: 2 },
     ];
   }

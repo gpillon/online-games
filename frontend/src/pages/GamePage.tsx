@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CardComponent } from '@/components/game/CardComponent';
+import { EmotePanel } from '@/components/game/EmotePanel';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { getGameEntry } from '@/games/registry';
@@ -57,7 +58,8 @@ export function GamePage() {
             <p className="font-display text-xs uppercase tracking-[0.35em] text-gold/60">{entry.title}</p>
             <h1 className="font-display text-2xl text-gradient-gold md:text-3xl">Tavolo da gioco</h1>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <EmotePanel roomId={currentRoom?.id ?? ''} />
             <Button type="button" variant="ghost" className="text-xs" onClick={() => setLastOpen(true)}>
               Ultima presa
             </Button>

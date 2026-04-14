@@ -9,46 +9,65 @@ export interface TrickAreaProps {
   trickWinnerSeat?: number;
 }
 
-function slotAngle(seat: number, mySeat: number, numPlayers: number): number {
-  const rel = (seat - mySeat + numPlayers) % numPlayers;
-  if (numPlayers <= 2) {
-    return rel === 0 ? 180 : 0;
+function seatPosition(
+  seat: number,
+  mySeat: number,
+  numPlayers: number,
+): { x: number; y: number } {
+  const n = Math.max(numPlayers, 2);
+  const rel = (seat - mySeat + n) % n;
+
+  if (n <= 2) {
+    return rel === 0 ? { x: 0, y: 70 } : { x: 0, y: -70 };
   }
-  if (numPlayers === 3) {
-    const m: Record<number, number> = { 0: 180, 1: 90, 2: -90 };
-    return m[rel] ?? 0;
+  if (n === 3) {
+    const positions: Record<number, { x: number; y: number }> = {
+      0: { x: 0, y: 70 },
+      1: { x: 90, y: 0 },
+      2: { x: -90, y: 0 },
+    };
+    return positions[rel] ?? { x: 0, y: 0 };
   }
-  const m4: Record<number, number> = { 0: 180, 1: 90, 2: 0, 3: -90 };
-  return m4[rel] ?? 0;
+  const positions4: Record<number, { x: number; y: number }> = {
+    0: { x: 0, y: 70 },
+    1: { x: 100, y: 0 },
+    2: { x: 0, y: -70 },
+    3: { x: -100, y: 0 },
+  };
+  return positions4[rel] ?? { x: 0, y: 0 };
+}
+
+function winnerDirection(
+  seat: number,
+  mySeat: number,
+  numPlayers: number,
+): { x: number; y: number } {
+  const pos = seatPosition(seat, mySeat, numPlayers);
+  const scale = 2.8;
+  return { x: pos.x * scale, y: pos.y * scale };
 }
 
 export function TrickArea({ trick, mySeatIndex, numPlayers, trickWinnerSeat }: TrickAreaProps) {
-  const n = Math.max(numPlayers, 2);
-  const winnerAngle =
-    trickWinnerSeat !== undefined ? slotAngle(trickWinnerSeat, mySeatIndex, Math.max(n, 4)) : 0;
-  const winRad = (winnerAngle * Math.PI) / 180;
-  const exitX = Math.sin(winRad) * 200;
-  const exitY = -Math.cos(winRad) * 120;
+  const exit =
+    trickWinnerSeat !== undefined
+      ? winnerDirection(trickWinnerSeat, mySeatIndex, numPlayers)
+      : { x: 0, y: -60 };
 
   return (
-    <div className="relative flex min-h-[140px] items-center justify-center">
+    <div className="relative flex min-h-[160px] items-center justify-center">
       <AnimatePresence mode="popLayout">
         {trick.map((t, i) => {
-          const angle = slotAngle(t.seatIndex, mySeatIndex, Math.max(n, 4));
-          const dist = 52;
-          const rad = (angle * Math.PI) / 180;
-          const x = Math.sin(rad) * dist;
-          const y = -Math.cos(rad) * dist * 0.5;
+          const pos = seatPosition(t.seatIndex, mySeatIndex, numPlayers);
           return (
             <motion.div
               key={t.card.id}
               className="absolute"
-              initial={{ opacity: 0, scale: 0.5, x: x * 1.8, y: y * 1.8 + 40 }}
-              animate={{ opacity: 1, scale: 1, x, y }}
-              exit={{ opacity: 0, scale: 0.6, x: exitX, y: exitY }}
-              transition={{ type: 'spring', stiffness: 380, damping: 26, delay: i * 0.05 }}
+              initial={{ opacity: 0, scale: 0.5, x: pos.x * 2, y: pos.y * 2 }}
+              animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
+              exit={{ opacity: 0, scale: 0.6, x: exit.x, y: exit.y }}
+              transition={{ type: 'spring', stiffness: 350, damping: 24, delay: i * 0.04 }}
             >
-              <CardComponent card={t.card} layoutId={`trick-${t.card.id}`} className="scale-90" />
+              <CardComponent card={t.card} layoutId={`trick-${t.card.id}`} />
             </motion.div>
           );
         })}

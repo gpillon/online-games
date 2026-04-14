@@ -3,7 +3,6 @@ import {
   Rank,
   Suit,
   TRESSETTE_CARD_ORDER,
-  TRESSETTE_CARD_POINTS,
   TressetteClientState,
   TressetteDeclarationType,
 } from '@online-games/shared';
@@ -12,10 +11,6 @@ import { IAIPlayer } from '../../interfaces/ai-player.interface';
 function rankStrength(rank: Rank): number {
   const i = TRESSETTE_CARD_ORDER.indexOf(rank);
   return i === -1 ? 999 : i;
-}
-
-function cardPoints(card: Card): number {
-  return TRESSETTE_CARD_POINTS[card.rank] ?? 0;
 }
 
 function bestContenderInTrick(
@@ -63,9 +58,9 @@ function napoletanaIfAny(hand: Card[]): Card[] | null {
 }
 
 function bongiocoIfAny(hand: Card[]): Card[] | null {
-  const valuable = hand.filter((c) => cardPoints(c) > 0);
-  if (valuable.length >= 3) {
-    return valuable.slice(0, Math.min(5, valuable.length));
+  for (const r of [Rank.ASSO, Rank.DUE, Rank.TRE]) {
+    const matching = hand.filter((c) => c.rank === r);
+    if (matching.length >= 3) return matching.slice(0, 3);
   }
   return null;
 }

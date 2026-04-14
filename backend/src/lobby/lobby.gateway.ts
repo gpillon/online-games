@@ -318,6 +318,7 @@ export class LobbyGateway
       move?: unknown;
       type?: string;
       data?: Record<string, unknown>;
+      declaration?: { type: string; cardIds: string[] };
     },
   ) {
     const userId = client.data.userId as string;
@@ -335,11 +336,14 @@ export class LobbyGateway
         throw new WsException('Not your turn');
       }
       this.lobbyService.touchHumanActivity(roomId);
-      const move =
+      let move: unknown =
         body.move ??
         (body.type === 'play_card'
           ? { type: 'play', cardId: (body.data as { cardId: string })?.cardId }
           : body.data);
+      if (body.declaration && move && typeof move === 'object') {
+        (move as Record<string, unknown>).declaration = body.declaration;
+      }
       const result = engine.makeMove(userId, move);
       if (!result.success) {
         this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_ERROR, {
@@ -395,6 +399,21 @@ export class LobbyGateway
       timestamp: new Date().toISOString(),
     };
     this.server.to(`room:${body.roomId}`).emit(WS_EVENTS.ROOM_CHAT_MESSAGE, msg);
+    return { ok: true };
+  }
+
+  @SubscribeMessage(WS_EVENTS.GAME_EMOTE)
+  handleEmote(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string; emoteId: string },
+  ) {
+    const userId = client.data.userId as string;
+    const username = client.data.username as string;
+    this.server.to(`room:${body.roomId}`).emit(WS_EVENTS.GAME_EMOTE, {
+      userId,
+      username,
+      emoteId: body.emoteId,
+    });
     return { ok: true };
   }
 

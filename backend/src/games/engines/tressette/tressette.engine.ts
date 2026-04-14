@@ -301,7 +301,44 @@ export class TressetteEngine implements IGameEngine {
         !this.hasPlayedCardThisHand[playerId] &&
         !this.declaredPlayers.has(playerId) &&
         this.trickInHand === 0,
+      availableDeclarations: this.computeAvailableDeclarations(playerId),
     };
+  }
+
+  private computeAvailableDeclarations(playerId: string): TressetteDeclarationType[] {
+    if (
+      this.hasPlayedCardThisHand[playerId] ||
+      this.declaredPlayers.has(playerId) ||
+      this.trickInHand !== 0
+    ) {
+      return [];
+    }
+    const hand = this.hands[playerId] ?? [];
+    if (hand.length === 0) return [];
+    const available: TressetteDeclarationType[] = [];
+
+    const bySuit = new Map<Suit, Card[]>();
+    for (const c of hand) {
+      const arr = bySuit.get(c.suit) ?? [];
+      arr.push(c);
+      bySuit.set(c.suit, arr);
+    }
+    for (const cards of bySuit.values()) {
+      const ranks = new Set(cards.map((c) => c.rank));
+      if (ranks.has(Rank.ASSO) && ranks.has(Rank.DUE) && ranks.has(Rank.TRE)) {
+        available.push(TressetteDeclarationType.NAPOLETANA);
+        break;
+      }
+    }
+
+    for (const r of [Rank.ASSO, Rank.DUE, Rank.TRE]) {
+      if (hand.filter((c) => c.rank === r).length >= 3) {
+        available.push(TressetteDeclarationType.BONGIOCO);
+        break;
+      }
+    }
+
+    return available;
   }
 
   isValidMove(playerId: string, move: unknown): boolean {
@@ -357,6 +394,12 @@ export class TressetteEngine implements IGameEngine {
     }
 
     if (m.declaration) {
+      if (!m.declaration.cardIds || m.declaration.cardIds.length === 0) {
+        m.declaration.cardIds = this.autoSelectDeclarationCards(
+          m.declaration.type,
+          hand,
+        );
+      }
       const declErr = this.validateDeclaration(playerId, m.declaration, hand);
       if (declErr) return { success: false, error: declErr };
     }
@@ -575,6 +618,32 @@ export class TressetteEngine implements IGameEngine {
     );
   }
 
+  private autoSelectDeclarationCards(
+    type: TressetteDeclarationType,
+    hand: Card[],
+  ): string[] {
+    if (type === TressetteDeclarationType.NAPOLETANA) {
+      const bySuit = new Map<Suit, Card[]>();
+      for (const c of hand) {
+        const arr = bySuit.get(c.suit) ?? [];
+        arr.push(c);
+        bySuit.set(c.suit, arr);
+      }
+      for (const cards of bySuit.values()) {
+        const asso = cards.find((c) => c.rank === Rank.ASSO);
+        const due = cards.find((c) => c.rank === Rank.DUE);
+        const tre = cards.find((c) => c.rank === Rank.TRE);
+        if (asso && due && tre) return [asso.id, due.id, tre.id];
+      }
+    } else if (type === TressetteDeclarationType.BONGIOCO) {
+      for (const r of [Rank.ASSO, Rank.DUE, Rank.TRE]) {
+        const matching = hand.filter((c) => c.rank === r);
+        if (matching.length >= 3) return matching.slice(0, 3).map((c) => c.id);
+      }
+    }
+    return [];
+  }
+
   private validateDeclaration(
     playerId: string,
     decl: { type: TressetteDeclarationType; cardIds: string[] },
@@ -606,10 +675,13 @@ export class TressetteEngine implements IGameEngine {
         return 'Napoletana must be Asso, Due, Tre';
       }
     } else if (decl.type === TressetteDeclarationType.BONGIOCO) {
-      if (cards.length < 3) return 'Bongioco requires at least three cards';
-      const allValuable = cards.every((c) => cardPoints(c) > 0);
-      if (!allValuable) {
-        return 'Bongioco cards must carry points';
+      if (cards.length !== 3) return 'Bongioco requires exactly three cards';
+      const rank = cards[0].rank;
+      if (![Rank.ASSO, Rank.DUE, Rank.TRE].includes(rank)) {
+        return 'Bongioco must be three Assi, three Due, or three Tre';
+      }
+      if (!cards.every((c) => c.rank === rank)) {
+        return 'Bongioco cards must all be the same rank';
       }
     } else {
       return 'Unknown declaration';
@@ -628,8 +700,8 @@ export class TressetteEngine implements IGameEngine {
     let points = 0;
     if (decl.type === TressetteDeclarationType.NAPOLETANA) {
       points = 3;
-    } else {
-      points = 3 + Math.max(0, cards.length - 3);
+    } else if (decl.type === TressetteDeclarationType.BONGIOCO) {
+      points = 4;
     }
     const player = this.players.find((p) => p.id === playerId)!;
     const team = this.teamIndexForSeat(player.seatIndex);

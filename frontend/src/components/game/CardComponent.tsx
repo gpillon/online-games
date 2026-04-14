@@ -13,6 +13,8 @@ export interface CardComponentProps {
   onClick?: () => void;
   className?: string;
   style?: CSSProperties;
+  width?: number;
+  height?: number;
 }
 
 export function CardComponent({
@@ -25,10 +27,10 @@ export function CardComponent({
   onClick,
   className = '',
   style,
+  width = 96,
+  height = 136,
 }: CardComponentProps) {
   const src = faceDown || !card ? CARD_BACK_SRC : cardFaceSrc(card);
-  const w = 76;
-  const h = 108;
 
   return (
     <motion.div
@@ -36,11 +38,11 @@ export function CardComponent({
       role={disabled ? undefined : 'button'}
       tabIndex={disabled ? undefined : 0}
       className={`relative cursor-pointer select-none ${className}`}
-      style={{ width: w, height: h, ...style }}
+      style={{ width, height, ...style }}
       whileHover={
         disabled
           ? undefined
-          : { y: -10, rotate: playable ? -2 : -4, scale: 1.04, transition: { type: 'spring', stiffness: 420, damping: 22 } }
+          : { y: -10, rotate: playable ? -2 : -4, transition: { type: 'spring', stiffness: 420, damping: 22 } }
       }
       whileTap={disabled ? undefined : { scale: 0.97 }}
       onClick={disabled ? undefined : onClick}
@@ -53,7 +55,7 @@ export function CardComponent({
     >
       <div
         className={`
-          playing-card-shadow absolute inset-0 overflow-hidden rounded-md border-2 transition-all duration-300
+          playing-card-shadow absolute inset-0 overflow-hidden rounded-md border-2 transition-colors duration-300
           ${selected ? 'border-gold shadow-gold-glow ring-2 ring-gold/40' : 'border-gold/20'}
           ${playable && !selected ? 'ring-2 ring-emerald-400/50' : ''}
           ${disabled ? 'opacity-50 grayscale' : ''}

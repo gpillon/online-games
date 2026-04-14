@@ -48,8 +48,8 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
     private readonly lobbyPersistence: LobbyPersistenceService,
   ) {}
 
-  onModuleInit(): void {
-    const data = this.lobbyPersistence.load();
+  async onModuleInit(): Promise<void> {
+    const data = await this.lobbyPersistence.load();
     if (data?.rooms?.length) {
       for (const room of data.rooms) {
         const r = { ...room };
@@ -65,16 +65,17 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
           this.logger.warn(`Failed to restore game ${gameId}: ${String(e)}`);
         }
       }
+      this.logger.log(`Restored ${data.rooms.length} room(s) from DB`);
     }
-    this.lobbyPersistence.attachAutosave(() => this.saveAll());
+    this.lobbyPersistence.attachAutosave(() => void this.saveAll());
   }
 
-  onModuleDestroy(): void {
-    this.saveAll();
+  async onModuleDestroy(): Promise<void> {
+    await this.saveAll();
     this.lobbyPersistence.detachAutosave();
   }
 
-  saveAll(): void {
+  async saveAll(): Promise<void> {
     const rooms = this.listAllRooms();
     const engines = new Map<string, unknown>();
     for (const [gameId, engine] of this.gamesService.getAllEngines()) {
@@ -84,7 +85,7 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
         engines.set(gameId, engine.getState());
       }
     }
-    this.lobbyPersistence.save(rooms, engines);
+    await this.lobbyPersistence.save(rooms, engines);
   }
 
   createRoom(

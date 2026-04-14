@@ -1,6 +1,8 @@
 import type { UserProfile } from '@online-games/shared';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { EmoteUpload } from '@/components/EmoteUpload';
+import { Button } from '@/components/ui/Button';
 import { GlassPanel } from '@/components/ui/Card';
 import { apiFetch } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -18,6 +20,29 @@ export function ProfilePage() {
   const { user, token, checkAuth } = useAuthStore();
   const [profile, setProfile] = useState<UserProfile | null>(user);
   const [err, setErr] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [nameErr, setNameErr] = useState('');
+  const [nameOk, setNameOk] = useState(false);
+
+  const handleNameChange = async () => {
+    setNameErr('');
+    setNameOk(false);
+    try {
+      const updated = await apiFetch<UserProfile>('/users/username', {
+        token,
+        method: 'PATCH',
+        body: { username: newName.trim() },
+      });
+      setProfile(updated);
+      setNameOk(true);
+      setNewName('');
+      void checkAuth();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'Errore nel cambio nome';
+      setNameErr(msg);
+    }
+  };
 
   useEffect(() => {
     void checkAuth();
@@ -65,6 +90,33 @@ export function ProfilePage() {
         </div>
       </GlassPanel>
 
+      {p.isAnonymous && (
+        <GlassPanel className="p-6">
+          <h3 className="mb-3 font-display text-lg text-gold">Cambia nome</h3>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              maxLength={20}
+              className="flex-1 rounded-lg border border-gold/20 bg-black/40 px-3 py-2 font-body text-sm text-ivory focus:border-gold/50 focus:outline-none"
+              placeholder="Nuovo nome"
+            />
+            <Button
+              type="button"
+              variant="primary"
+              className="text-sm"
+              onClick={() => void handleNameChange()}
+              disabled={!newName.trim() || newName.length < 2}
+            >
+              Salva
+            </Button>
+          </div>
+          {nameErr && <p className="mt-2 text-xs text-red-400">{nameErr}</p>}
+          {nameOk && <p className="mt-2 text-xs text-emerald-400">Nome aggiornato!</p>}
+        </GlassPanel>
+      )}
+
       <div className="grid gap-4 md:grid-cols-4">
         {[
           { label: 'Partite', value: String(p.stats.gamesPlayed) },
@@ -84,6 +136,11 @@ export function ProfilePage() {
         <p className="font-body text-gold/65">
           Le partite giocate appariranno qui quando il server memorizzerà la cronologia.
         </p>
+      </GlassPanel>
+
+      <GlassPanel className="p-6">
+        <h3 className="mb-4 font-display text-xl text-gold">Le tue emote</h3>
+        <EmoteUpload />
       </GlassPanel>
     </div>
   );

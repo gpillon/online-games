@@ -21,11 +21,11 @@ export interface PlayerHandProps {
 
 export function PlayerHand({ cards, selectedId, onSelect, validCardIds, myTurn }: PlayerHandProps) {
   const sorted = sortHand(cards);
-  const overlap = 42;
-  const totalWidth = Math.max(280, (sorted.length - 1) * overlap + 76);
+  const overlap = 52;
+  const totalWidth = Math.max(320, (sorted.length - 1) * overlap + 96);
 
   return (
-    <div className="relative flex justify-center" style={{ width: totalWidth, height: 140 }}>
+    <div className="relative flex justify-center" style={{ width: totalWidth, height: 160 }}>
       <AnimatePresence>
         {sorted.map((card, i) => {
           const isPlayable =

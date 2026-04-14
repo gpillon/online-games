@@ -77,6 +77,17 @@ export class UsersService {
     return this.usersRepo.findOne({ where: { username } });
   }
 
+  async updateUsername(userId: string, newUsername: string): Promise<UserEntity> {
+    const existing = await this.usersRepo.findOne({ where: { username: newUsername } });
+    if (existing && existing.id !== userId) {
+      throw new ConflictException('Username already taken');
+    }
+    await this.usersRepo.update(userId, { username: newUsername });
+    const next = await this.findById(userId);
+    if (!next) throw new NotFoundException('User not found');
+    return next;
+  }
+
   async findByVerificationToken(token: string): Promise<UserEntity | null> {
     return this.usersRepo.findOne({
       where: { emailVerificationToken: token },
