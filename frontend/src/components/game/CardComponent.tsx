@@ -58,7 +58,6 @@ export function CardComponent({
           playing-card-shadow absolute inset-0 overflow-hidden rounded-md border-2 transition-colors duration-300
           ${selected ? 'border-gold shadow-gold-glow ring-2 ring-gold/40' : 'border-gold/20'}
           ${playable && !selected ? 'ring-2 ring-emerald-400/50' : ''}
-          ${disabled ? 'opacity-50 grayscale' : ''}
         `}
       >
         <img src={src} alt="" className="h-full w-full object-cover" draggable={false} />

@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { GlassPanel } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -8,6 +8,8 @@ import { useAuthStore } from '@/stores/authStore';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get('returnTo') || '/lobby';
   const { login, loginAnonymous, error, loading } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -43,7 +45,7 @@ export function LoginPage() {
             e.preventDefault();
             try {
               await login({ email, password });
-              navigate('/lobby');
+              navigate(returnTo);
             } catch {
               /* surfaced via store */
             }
@@ -79,7 +81,7 @@ export function LoginPage() {
           onClick={async () => {
             try {
               await loginAnonymous();
-              navigate('/lobby');
+              navigate(returnTo);
             } catch {
               /* store */
             }

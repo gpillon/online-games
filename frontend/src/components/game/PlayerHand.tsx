@@ -21,11 +21,14 @@ export interface PlayerHandProps {
 
 export function PlayerHand({ cards, selectedId, onSelect, validCardIds, myTurn }: PlayerHandProps) {
   const sorted = sortHand(cards);
-  const overlap = 52;
-  const totalWidth = Math.max(320, (sorted.length - 1) * overlap + 96);
+  const cardW = myTurn ? 108 : 96;
+  const cardH = myTurn ? 152 : 136;
+  const overlap = myTurn ? 56 : 52;
+  const totalWidth = Math.max(320, (sorted.length - 1) * overlap + cardW);
+  const handHeight = myTurn ? 176 : 160;
 
   return (
-    <div className="relative flex justify-center" style={{ width: totalWidth, height: 160 }}>
+    <div className="relative flex justify-center" style={{ width: totalWidth, height: handHeight }}>
       <AnimatePresence>
         {sorted.map((card, i) => {
           const isPlayable =
@@ -54,9 +57,11 @@ export function PlayerHand({ cards, selectedId, onSelect, validCardIds, myTurn }
                 card={card}
                 layoutId={`hand-${card.id}`}
                 selected={selectedId === card.id}
-                disabled={!isPlayable}
+                disabled={!myTurn}
                 playable={isPlayable}
                 onClick={() => isPlayable && onSelect(card)}
+                width={cardW}
+                height={cardH}
               />
             </motion.div>
           );

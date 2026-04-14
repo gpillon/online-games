@@ -29,6 +29,8 @@ import { UsersService } from '../users/users.service';
 import { AdminGuard } from './admin.guard';
 import { AdminListUsersQueryDto } from './dto/admin-list-users-query.dto';
 import { AdminStatsResponseDto } from './dto/admin-stats-response.dto';
+import { AdminSetEmailDto } from './dto/admin-set-email.dto';
+import { AdminSetPasswordDto } from './dto/admin-set-password.dto';
 import { AdminUpdateRoleDto } from './dto/admin-update-role.dto';
 import { AdminUserResponseDto } from './dto/admin-user-response.dto';
 import { AdminUsersPageResponseDto } from './dto/admin-users-page-response.dto';
@@ -147,6 +149,29 @@ export class AdminController {
       throw new ForbiddenException();
     }
     await this.usersService.deleteUser(id);
+  }
+
+  @Patch('users/:id/email')
+  @ApiOkResponse({ type: AdminUserResponseDto })
+  async setEmail(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminSetEmailDto,
+  ): Promise<AdminUserResponseDto> {
+    const user = await this.usersService.convertAnonymousToRegistered(
+      id,
+      dto.email,
+    );
+    return toAdminUserDto(user);
+  }
+
+  @Patch('users/:id/password')
+  @ApiOkResponse({ type: AdminUserResponseDto })
+  async setPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminSetPasswordDto,
+  ): Promise<AdminUserResponseDto> {
+    const user = await this.usersService.setPassword(id, dto.password);
+    return toAdminUserDto(user);
   }
 
   @Get('stats')

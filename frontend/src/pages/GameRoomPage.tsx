@@ -20,11 +20,18 @@ export function GameRoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
   const checkAuth = useAuthStore((s) => s.checkAuth);
 
   useEffect(() => {
     void checkAuth();
   }, [checkAuth]);
+
+  useEffect(() => {
+    if (!token) {
+      navigate(`/login?returnTo=${encodeURIComponent(`/room/${roomId}`)}`);
+    }
+  }, [token, roomId, navigate]);
   const { currentRoom, joinRoom, leaveRoom, addAi, startGame, sendChat, chatMessages, appendChat, patchCurrentRoom } =
     useLobbyStore();
   const [chatInput, setChatInput] = useState('');

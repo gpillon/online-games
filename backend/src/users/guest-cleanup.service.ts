@@ -7,7 +7,7 @@ import {
 import { UsersService } from './users.service';
 
 const FIVE_MIN_MS = 5 * 60 * 1000;
-const ONE_HOUR_MS = 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class GuestCleanupService implements OnModuleInit, OnModuleDestroy {
@@ -32,7 +32,7 @@ export class GuestCleanupService implements OnModuleInit, OnModuleDestroy {
 
   private async runCleanup() {
     try {
-      const removed = await this.usersService.deleteStaleGuests(ONE_HOUR_MS);
+      const removed = await this.usersService.deleteStaleGuests(TWENTY_FOUR_HOURS_MS);
       this.logger.log(`Deleted ${removed} stale guest user(s)`);
     } catch (err) {
       this.logger.warn(`Guest cleanup failed: ${String(err)}`);

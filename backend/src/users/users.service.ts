@@ -185,6 +185,35 @@ export class UsersService {
     await this.usersRepo.delete(id);
   }
 
+  async convertAnonymousToRegistered(
+    id: string,
+    email: string,
+  ): Promise<UserEntity> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.isAnonymous) {
+      throw new ConflictException('User is already registered');
+    }
+    const existingEmail = await this.findByEmail(email);
+    if (existingEmail && existingEmail.id !== id) {
+      throw new ConflictException('Email already in use');
+    }
+    await this.usersRepo.update(id, {
+      email,
+      isAnonymous: false,
+      isEmailVerified: true,
+    });
+    return (await this.findById(id))!;
+  }
+
+  async setPassword(id: string, plainPassword: string): Promise<UserEntity> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException('User not found');
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+    await this.usersRepo.update(id, { passwordHash });
+    return (await this.findById(id))!;
+  }
+
   async findOrCreateAdmin(
     username: string,
     plainPassword: string,

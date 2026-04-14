@@ -6,7 +6,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Crown,
+  KeyRound,
   LayoutDashboard,
+  Mail,
   RefreshCw,
   Search,
   Shield,
@@ -84,6 +86,15 @@ export function AdminPage() {
     message: string;
     action: () => Promise<void>;
   }>({ open: false, title: '', message: '', action: async () => {} });
+
+  const [emailModal, setEmailModal] = useState<{ open: boolean; userId: string; username: string }>({
+    open: false, userId: '', username: '',
+  });
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordModal, setPasswordModal] = useState<{ open: boolean; userId: string; username: string }>({
+    open: false, userId: '', username: '',
+  });
+  const [passwordInput, setPasswordInput] = useState('');
 
   useEffect(() => {
     if (!user || user.role !== 'admin') {
@@ -315,6 +326,14 @@ export function AdminPage() {
                                   () => adminAction(`/admin/users/${u.id}`, 'DELETE'),
                                 )
                               }
+                              onSetEmail={() => {
+                                setEmailInput('');
+                                setEmailModal({ open: true, userId: u.id, username: u.username });
+                              }}
+                              onSetPassword={() => {
+                                setPasswordInput('');
+                                setPasswordModal({ open: true, userId: u.id, username: u.username });
+                              }}
                             />
                           </td>
                         </tr>
@@ -377,6 +396,67 @@ export function AdminPage() {
           </Button>
         </div>
       </Modal>
+
+      <Modal
+        open={emailModal.open}
+        onClose={() => setEmailModal((m) => ({ ...m, open: false }))}
+        title={`Imposta email per ${emailModal.username}`}
+      >
+        <p className="mb-4 font-body text-sm text-ivory/70">
+          L'utente anonimo verrà convertito in utente registrato.
+        </p>
+        <input
+          type="email"
+          value={emailInput}
+          onChange={(e) => setEmailInput(e.target.value)}
+          placeholder="email@esempio.com"
+          className="mb-6 w-full rounded-lg border border-gold/30 bg-black/30 px-3 py-2 font-body text-sm text-ivory placeholder:text-gold/40 focus:border-gold/60 focus:outline-none"
+        />
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" onClick={() => setEmailModal((m) => ({ ...m, open: false }))}>
+            Annulla
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!emailInput.includes('@')}
+            onClick={async () => {
+              await adminAction(`/admin/users/${emailModal.userId}/email`, 'PATCH', { email: emailInput });
+              setEmailModal((m) => ({ ...m, open: false }));
+            }}
+          >
+            Salva
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={passwordModal.open}
+        onClose={() => setPasswordModal((m) => ({ ...m, open: false }))}
+        title={`Imposta password per ${passwordModal.username}`}
+      >
+        <input
+          type="password"
+          value={passwordInput}
+          onChange={(e) => setPasswordInput(e.target.value)}
+          placeholder="Nuova password (min 6 caratteri)"
+          className="mb-6 w-full rounded-lg border border-gold/30 bg-black/30 px-3 py-2 font-body text-sm text-ivory placeholder:text-gold/40 focus:border-gold/60 focus:outline-none"
+        />
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" onClick={() => setPasswordModal((m) => ({ ...m, open: false }))}>
+            Annulla
+          </Button>
+          <Button
+            variant="primary"
+            disabled={passwordInput.length < 6}
+            onClick={async () => {
+              await adminAction(`/admin/users/${passwordModal.userId}/password`, 'PATCH', { password: passwordInput });
+              setPasswordModal((m) => ({ ...m, open: false }));
+            }}
+          >
+            Salva
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -434,6 +514,8 @@ function UserActions({
   onMakeAdmin,
   onRemoveAdmin,
   onDelete,
+  onSetEmail,
+  onSetPassword,
 }: {
   u: AdminUserView;
   currentUserId: string;
@@ -443,11 +525,31 @@ function UserActions({
   onMakeAdmin: () => void;
   onRemoveAdmin: () => void;
   onDelete: () => void;
+  onSetEmail: () => void;
+  onSetPassword: () => void;
 }) {
   const isSelf = u.id === currentUserId;
 
   return (
     <div className="flex items-center justify-end gap-1">
+      {u.isAnonymous && (
+        <button
+          type="button"
+          onClick={onSetEmail}
+          className="rounded p-1.5 text-sky-400 hover:bg-sky-400/10"
+          title="Imposta email (converti in registrato)"
+        >
+          <Mail className="h-4 w-4" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onSetPassword}
+        className="rounded p-1.5 text-amber-300 hover:bg-amber-300/10"
+        title="Imposta password"
+      >
+        <KeyRound className="h-4 w-4" />
+      </button>
       {!u.isEmailVerified && !u.isAnonymous && (
         <button
           type="button"
