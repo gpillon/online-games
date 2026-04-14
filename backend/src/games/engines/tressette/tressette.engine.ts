@@ -69,6 +69,7 @@ export class TressetteEngine implements IGameEngine {
   private hasPlayedCardThisHand: Record<string, boolean> = {};
   private declaredPlayers: Set<string> = new Set();
   private lastTrickWinnerPlayerId: string | null = null;
+  private lastDrawnCards: { playerId: string; card: Card }[] = [];
   private createdAt = new Date().toISOString();
 
   constructor(gameId: string, options: TressetteEngineOptions) {
@@ -109,6 +110,7 @@ export class TressetteEngine implements IGameEngine {
       hasPlayedCardThisHand: { ...this.hasPlayedCardThisHand },
       declaredPlayers: [...this.declaredPlayers],
       lastTrickWinnerPlayerId: this.lastTrickWinnerPlayerId,
+      lastDrawnCards: this.lastDrawnCards.map((d) => ({ playerId: d.playerId, card: { ...d.card } })),
       createdAt: this.createdAt,
     };
   }
@@ -179,6 +181,12 @@ export class TressetteEngine implements IGameEngine {
     }
     if (s.lastTrickWinnerPlayerId === null || typeof s.lastTrickWinnerPlayerId === 'string') {
       this.lastTrickWinnerPlayerId = s.lastTrickWinnerPlayerId as string | null;
+    }
+    if (Array.isArray(s.lastDrawnCards)) {
+      this.lastDrawnCards = (s.lastDrawnCards as { playerId: string; card: Card }[]).map((d) => ({
+        playerId: d.playerId,
+        card: { ...d.card },
+      }));
     }
     if (typeof s.createdAt === 'string') {
       this.createdAt = s.createdAt;
@@ -302,6 +310,10 @@ export class TressetteEngine implements IGameEngine {
         !this.declaredPlayers.has(playerId) &&
         this.trickInHand === 0,
       availableDeclarations: this.computeAvailableDeclarations(playerId),
+      drawnCards:
+        this.mode === TressetteMode.TWO_PLAYERS && this.lastDrawnCards.length > 0
+          ? this.lastDrawnCards.map((d) => ({ playerId: d.playerId, card: { ...d.card } }))
+          : undefined,
     };
   }
 
@@ -407,6 +419,8 @@ export class TressetteEngine implements IGameEngine {
     if (dryRun) {
       return { success: true };
     }
+
+    this.lastDrawnCards = [];
 
     if (m.declaration) {
       this.recordDeclaration(playerId, m.declaration, hand);
@@ -524,6 +538,7 @@ export class TressetteEngine implements IGameEngine {
     this.trickInHand = 0;
     this.hasPlayedCardThisHand = {};
     this.declaredPlayers.clear();
+    this.lastDrawnCards = [];
     for (const p of this.players) {
       this.tricksWon[p.id] = this.tricksWon[p.id] ?? [];
     }
@@ -582,6 +597,7 @@ export class TressetteEngine implements IGameEngine {
   }
 
   private drawFromStock(winnerId: string): void {
+    this.lastDrawnCards = [];
     if (this.stock.length === 0) return;
     const loser = this.players.find((p) => p.id !== winnerId)!;
     const drawOrder = [winnerId, loser.id];
@@ -589,6 +605,7 @@ export class TressetteEngine implements IGameEngine {
       if (this.stock.length === 0) break;
       const card = this.stock.pop()!;
       this.hands[pid].push(card);
+      this.lastDrawnCards.push({ playerId: pid, card: { ...card } });
     }
   }
 
@@ -745,6 +762,10 @@ export class TressetteEngine implements IGameEngine {
       declarations: [...this.declarations],
       canDeclare: false,
       spectator: true,
+      drawnCards:
+        this.mode === TressetteMode.TWO_PLAYERS && this.lastDrawnCards.length > 0
+          ? this.lastDrawnCards.map((d) => ({ playerId: d.playerId, card: { ...d.card } }))
+          : undefined,
     };
   }
 

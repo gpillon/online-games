@@ -1,9 +1,10 @@
-import type { TressettePlayerInfo } from '@online-games/shared';
+import type { Card, TressettePlayerInfo } from '@online-games/shared';
 import * as OG from '@online-games/shared';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Eye, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { CardComponent } from '@/components/game/CardComponent';
 import { GameTable, type TableSeat } from '@/components/game/GameTable';
 import { OpponentHand } from '@/components/game/OpponentHand';
 import { PlayerHand } from '@/components/game/PlayerHand';
@@ -44,6 +45,8 @@ export function TressetteGame({ gameId }: GameViewProps) {
   const [announcements, setAnnouncements] = useState<FloatingAnnouncement[]>([]);
   const prevDeclCountRef = useRef(0);
   const pendingDecl = useGameStore((s) => s.pendingDeclaration);
+  const [drawnCardsDisplay, setDrawnCardsDisplay] = useState<{ playerId: string; playerName: string; card: Card }[] | null>(null);
+  const prevDrawnRef = useRef<string | null>(null);
 
   const players = client?.players ?? [];
   const numPlayers = Math.max(players.length, 2);
@@ -121,6 +124,23 @@ export function TressetteGame({ gameId }: GameViewProps) {
     }
     prevDeclCountRef.current = decls.length;
   }, [client?.declarations, players]);
+
+  useEffect(() => {
+    if (!client?.drawnCards || client.drawnCards.length === 0) {
+      prevDrawnRef.current = null;
+      return;
+    }
+    const key = client.drawnCards.map((d) => d.card.id).join(',');
+    if (key === prevDrawnRef.current) return;
+    prevDrawnRef.current = key;
+    const enriched = client.drawnCards.map((d) => ({
+      ...d,
+      playerName: players.find((p) => p.id === d.playerId)?.name ?? '?',
+    }));
+    setDrawnCardsDisplay(enriched);
+    const tid = window.setTimeout(() => setDrawnCardsDisplay(null), 2500);
+    return () => window.clearTimeout(tid);
+  }, [client?.drawnCards, players]);
 
   if (!client) {
     return (
@@ -215,6 +235,37 @@ export function TressetteGame({ gameId }: GameViewProps) {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Drawn cards overlay (2-player mode) */}
+      <AnimatePresence>
+        {drawnCardsDisplay && (
+          <motion.div
+            className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <motion.div
+              className="flex flex-col items-center gap-6"
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+            >
+              <p className="font-display text-2xl text-gold">Carte pescate</p>
+              <div className="flex items-center gap-10">
+                {drawnCardsDisplay.map((d) => (
+                  <div key={d.card.id} className="flex flex-col items-center gap-3">
+                    <CardComponent card={d.card} width={100} height={142} disabled />
+                    <span className="font-display text-sm text-ivory/90">{d.playerName}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showStartOverlay && (

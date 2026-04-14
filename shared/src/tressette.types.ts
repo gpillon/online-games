@@ -42,6 +42,7 @@ export interface TressetteClientState {
   declarations?: TressetteDeclaration[];
   canDeclare?: boolean;
   availableDeclarations?: TressetteDeclarationType[];
+  drawnCards?: { playerId: string; card: Card }[];
 }
 
 export interface TressettePlayerInfo {
