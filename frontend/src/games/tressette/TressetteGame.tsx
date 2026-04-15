@@ -47,6 +47,7 @@ export function TressetteGame({ gameId }: GameViewProps) {
   const pendingDecls = useGameStore((s) => s.pendingDeclarations);
   const [drawnCardsDisplay, setDrawnCardsDisplay] = useState<{ playerId: string; playerName: string; card: Card }[] | null>(null);
   const prevDrawnRef = useRef<string | null>(null);
+  const drawnTimerRef = useRef<number | null>(null);
 
   const players = client?.players ?? [];
   const numPlayers = Math.max(players.length, 2);
@@ -138,8 +139,11 @@ export function TressetteGame({ gameId }: GameViewProps) {
       playerName: players.find((p) => p.id === d.playerId)?.name ?? '?',
     }));
     setDrawnCardsDisplay(enriched);
-    const tid = window.setTimeout(() => setDrawnCardsDisplay(null), 2500);
-    return () => window.clearTimeout(tid);
+    if (drawnTimerRef.current) window.clearTimeout(drawnTimerRef.current);
+    drawnTimerRef.current = window.setTimeout(() => {
+      setDrawnCardsDisplay(null);
+      drawnTimerRef.current = null;
+    }, 2500);
   }, [client?.drawnCards, players]);
 
   if (!client) {
