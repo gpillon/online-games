@@ -62,7 +62,7 @@ export function TrickArea({ trick, mySeatIndex, numPlayers, trickWinnerSeat }: T
   const exit = { x: exitBase.x * posScale, y: exitBase.y * posScale };
 
   return (
-    <div className="relative flex min-h-[120px] items-center justify-center overflow-x-hidden sm:min-h-[160px]">
+    <div className="relative flex items-center justify-center" style={{ minHeight: cardH + 140 }}>
       <AnimatePresence mode="popLayout">
         {trick.map((t, i) => {
           const raw = seatPosition(t.seatIndex, mySeatIndex, numPlayers);

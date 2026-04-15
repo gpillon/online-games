@@ -39,8 +39,8 @@ export function PlayerHand({ cards, selectedId, onSelect, validCardIds, myTurn }
 
   return (
     <div
-      className="relative mx-auto flex max-w-full justify-center overflow-x-hidden"
-      style={{ width: totalWidth, height: handHeight, maxWidth: maxHandWidth }}
+      className="relative mx-auto flex justify-center"
+      style={{ width: totalWidth, height: handHeight }}
     >
       <AnimatePresence>
         {sorted.map((card, i) => {
