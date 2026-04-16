@@ -53,6 +53,7 @@ export class LobbyGateway
   private readonly logger = new Logger(LobbyGateway.name);
   private readonly ai = new TressetteAI();
   private idleCheckInterval?: ReturnType<typeof setInterval>;
+  private readonly rematchVotes = new Map<string, Set<string>>();
 
   constructor(
     private readonly lobbyService: LobbyService,
@@ -271,6 +272,19 @@ export class LobbyGateway
   ) {
     const userId = client.data.userId as string;
     const room = this.lobbyService.reorderPlayers(body.roomId, userId, body.orderedIds);
+    this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_UPDATE, room);
+    return { room };
+  }
+
+  @SubscribeMessage('room:set_option')
+  handleSetOption(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string; key: string; value: unknown },
+  ) {
+    const userId = client.data.userId as string;
+    const room = this.lobbyService.getRoom(body.roomId);
+    if (room.hostId !== userId) throw new WsException('Only host can change options');
+    room.config.options[body.key] = body.value;
     this.server.to(`room:${room.id}`).emit(WS_EVENTS.ROOM_UPDATE, room);
     return { room };
   }
@@ -585,15 +599,18 @@ export class LobbyGateway
       }
       if (aiChat) {
         const room = this.lobbyService.getRoom(roomId);
-        const aiPlayer = room.players.find((p) => p.id === expectedPlayer);
-        this.server.to(`room:${roomId}`).emit(WS_EVENTS.ROOM_CHAT_MESSAGE, {
-          id: `ai-${Date.now()}-${expectedPlayer}`,
-          roomId,
-          userId: expectedPlayer,
-          username: aiPlayer?.name ?? 'Bot',
-          message: aiChat,
-          timestamp: new Date().toISOString(),
-        });
+        const is2p = room.players.length <= 2;
+        if (!is2p) {
+          const aiPlayer = room.players.find((p) => p.id === expectedPlayer);
+          this.server.to(`room:${roomId}`).emit(WS_EVENTS.ROOM_CHAT_MESSAGE, {
+            id: `ai-${Date.now()}-${expectedPlayer}`,
+            roomId,
+            userId: expectedPlayer,
+            username: aiPlayer?.name ?? 'Bot',
+            message: aiChat,
+            timestamp: new Date().toISOString(),
+          });
+        }
       }
       this.server.to(`room:${roomId}`).emit(WS_EVENTS.GAME_MOVE_RESULT, {
         userId: expectedPlayer,
@@ -617,6 +634,48 @@ export class LobbyGateway
       const room = this.lobbyService.getRoom(roomId);
       await this.emitAfterMove(roomId, gameId, engine, result, room);
     });
+  }
+
+  @SubscribeMessage(WS_EVENTS.GAME_REMATCH_REQUEST)
+  async handleRematchRequest(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId: string },
+  ) {
+    const userId = client.data.userId as string;
+    const room = this.lobbyService.getRoom(body.roomId);
+    if (!room) throw new WsException('Room not found');
+    const humanPlayers = room.players.filter((p) => p.type !== PlayerType.AI);
+    if (!humanPlayers.some((p) => p.id === userId)) {
+      throw new WsException('Not a player in this room');
+    }
+
+    if (!this.rematchVotes.has(room.id)) {
+      this.rematchVotes.set(room.id, new Set());
+    }
+    const votes = this.rematchVotes.get(room.id)!;
+    votes.add(userId);
+
+    const needed = humanPlayers.length;
+    const accepted = Array.from(votes);
+
+    this.server.to(`room:${room.id}`).emit(WS_EVENTS.GAME_REMATCH_STATUS, {
+      roomId: room.id,
+      accepted,
+      needed,
+    });
+
+    if (votes.size >= needed) {
+      this.rematchVotes.delete(room.id);
+      this.lobbyService.resetRoomForRematch(room.id);
+      const updatedRoom = this.lobbyService.getRoom(room.id);
+      const { gameId } = this.lobbyService.startGame(room.id, updatedRoom.hostId);
+      this.server
+        .to(`room:${room.id}`)
+        .emit(WS_EVENTS.ROOM_UPDATE, { ...updatedRoom, activeGameId: gameId });
+      await this.emitGameState(room.id, gameId);
+      this.emitRoomsUpdate();
+      await this.maybeScheduleAi(room.id, gameId);
+    }
   }
 
   private async persistScores(room: LobbyRoom, engine: IGameEngine) {

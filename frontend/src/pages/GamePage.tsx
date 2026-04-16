@@ -1,7 +1,8 @@
 import type { TrickCard } from '@online-games/shared';
 import * as OG from '@online-games/shared';
+import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CardComponent } from '@/components/game/CardComponent';
 import { EmotePanel } from '@/components/game/EmotePanel';
@@ -14,6 +15,12 @@ import { getSocket } from '@/services/socket';
 import { useAuthStore } from '@/stores/authStore';
 import { useGameStore } from '@/stores/gameStore';
 import { useLobbyStore } from '@/stores/lobbyStore';
+
+interface ChatBubble {
+  id: string;
+  username: string;
+  message: string;
+}
 
 export function GamePage() {
   const { id } = useParams();
@@ -32,6 +39,15 @@ export function GamePage() {
   const clearGame = useGameStore((s) => s.clearGame);
   const bindGameEvents = useGameStore((s) => s.bindGameEvents);
 
+  const [chatBubbles, setChatBubbles] = useState<ChatBubble[]>([]);
+  const bubbleIdRef = useRef(0);
+
+  const addBubble = useCallback((username: string, message: string) => {
+    const id = `chat-${++bubbleIdRef.current}`;
+    setChatBubbles((prev) => [...prev.slice(-4), { id, username, message }]);
+    setTimeout(() => setChatBubbles((prev) => prev.filter((b) => b.id !== id)), 4000);
+  }, []);
+
   useEffect(() => {
     if (!gameId) return;
     const unbind = bindGameEvents(gameId, OG.GameType.TRESSETTE);
@@ -40,6 +56,16 @@ export function GamePage() {
       clearGame();
     };
   }, [gameId, bindGameEvents, clearGame]);
+
+  useEffect(() => {
+    const s = getSocket();
+    if (!s) return;
+    const handler = (data: { username?: string; message?: string }) => {
+      if (data.username && data.message) addBubble(data.username, data.message);
+    };
+    s.on(WS_EVENTS.ROOM_CHAT_MESSAGE, handler);
+    return () => { s.off(WS_EVENTS.ROOM_CHAT_MESSAGE, handler); };
+  }, [addBubble]);
 
   const entry = getGameEntry(gameType);
   const { component: GameView } = entry;
@@ -85,6 +111,24 @@ export function GamePage() {
         </div>
 
         <GameView gameId={gameId} />
+      </div>
+
+      {/* Floating chat bubbles */}
+      <div className="pointer-events-none fixed bottom-4 left-4 z-50 flex flex-col gap-2">
+        <AnimatePresence>
+          {chatBubbles.map((b) => (
+            <motion.div
+              key={b.id}
+              className="max-w-xs rounded-xl border border-gold/30 bg-black/80 px-4 py-2 shadow-lg backdrop-blur-sm"
+              initial={{ opacity: 0, x: -40, scale: 0.8 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -20, scale: 0.8 }}
+            >
+              <span className="mr-2 font-display text-xs text-gold">{b.username}</span>
+              <span className="font-body text-sm text-ivory/90">{b.message}</span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
       <Modal open={lastOpen} onClose={() => setLastOpen(false)} title="Ultima presa">

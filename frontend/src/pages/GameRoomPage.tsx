@@ -328,9 +328,27 @@ export function GameRoomPage() {
         </GlassPanel>
 
         {isHost && room.status === OG.GameStatus.WAITING && (
-          <Button type="button" variant="primary" className="w-full md:w-auto" onClick={() => startGame(room.id)}>
-            Inizia Partita
-          </Button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <Button type="button" variant="primary" className="w-full sm:w-auto" onClick={() => startGame(room.id)}>
+              Inizia Partita
+            </Button>
+            {max === 4 && (
+              <label className="flex cursor-pointer items-center gap-2 font-body text-sm text-gold/80">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gold/40 bg-black/40 text-gold accent-amber-500"
+                  onChange={(e) => {
+                    getSocket()?.emit('room:set_option', {
+                      roomId: room.id,
+                      key: 'randomTeams',
+                      value: e.target.checked,
+                    });
+                  }}
+                />
+                Squadre casuali
+              </label>
+            )}
+          </div>
         )}
       </div>
 

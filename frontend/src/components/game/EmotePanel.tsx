@@ -99,10 +99,10 @@ export function EmotePanel({ roomId, className = '' }: EmotePanelProps) {
       <AnimatePresence>
         {open && (
           <motion.div
-            className="absolute bottom-12 right-0 z-50 max-h-48 w-56 overflow-y-auto rounded-xl border border-gold/30 bg-black/90 p-2 shadow-xl backdrop-blur-sm"
-            initial={{ opacity: 0, y: 10, scale: 0.9 }}
+            className="absolute right-0 top-12 z-50 max-h-48 w-56 overflow-y-auto rounded-xl border border-gold/30 bg-black/90 p-2 shadow-xl backdrop-blur-sm"
+            initial={{ opacity: 0, y: -10, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.9 }}
+            exit={{ opacity: 0, y: -10, scale: 0.9 }}
           >
             {emotes.length === 0 ? (
               <p className="p-2 text-center font-body text-xs text-gold/50">Nessuna emote disponibile</p>

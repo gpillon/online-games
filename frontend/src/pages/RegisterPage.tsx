@@ -6,6 +6,60 @@ import { GlassPanel } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { useAuthStore } from '@/stores/authStore';
 
+declare global {
+  interface Window {
+    grecaptcha?: {
+      ready: (cb: () => void) => void;
+      execute: (siteKey: string, opts: { action: string }) => Promise<string>;
+    };
+  }
+}
+
+function loadRecaptchaScript(siteKey: string): Promise<void> {
+  if (window.grecaptcha?.execute) {
+    return Promise.resolve();
+  }
+  const existing = document.querySelector<HTMLScriptElement>(
+    'script[src*="google.com/recaptcha/api.js"]',
+  );
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      if (window.grecaptcha?.execute) {
+        resolve();
+        return;
+      }
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('reCAPTCHA load failed')), {
+        once: true,
+      });
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = `https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(siteKey)}`;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('reCAPTCHA load failed'));
+    document.head.appendChild(s);
+  });
+}
+
+async function getRecaptchaToken(siteKey: string): Promise<string> {
+  await loadRecaptchaScript(siteKey);
+  const g = window.grecaptcha;
+  if (!g) {
+    throw new Error('reCAPTCHA not available');
+  }
+  return new Promise((resolve, reject) => {
+    g.ready(() => {
+      void g
+        .execute(siteKey, { action: 'register' })
+        .then(resolve)
+        .catch(reject);
+    });
+  });
+}
+
 export function RegisterPage() {
   const navigate = useNavigate();
   const { register, error, loading } = useAuthStore();
@@ -39,7 +93,22 @@ export function RegisterPage() {
               return;
             }
             try {
-              await register({ username, email, password });
+              const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+              let captchaToken: string | undefined;
+              if (siteKey) {
+                try {
+                  captchaToken = await getRecaptchaToken(siteKey);
+                } catch {
+                  setLocalError('Verifica CAPTCHA non riuscita. Riprova.');
+                  return;
+                }
+              }
+              await register({
+                username,
+                email,
+                password,
+                ...(captchaToken ? { captchaToken } : {}),
+              });
               navigate('/lobby');
             } catch {
               /* store */

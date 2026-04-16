@@ -87,7 +87,9 @@ export class TressetteAI implements IAIPlayer {
 
   chooseMove(gameState: unknown, playerId: string): unknown {
     const state = gameState as TressetteClientState;
-    const hand = [...state.myHand];
+    const isMorto = (state as unknown as { isMortoTurn?: boolean }).isMortoTurn === true;
+    const mortoCards = (state as unknown as { mortoHand?: Card[] }).mortoHand ?? [];
+    const hand = isMorto ? [...mortoCards] : [...state.myHand];
     const led = state.currentTrick[0]?.card.suit;
     const options = legalCards(hand, led);
     const followingSuit = !!led && options[0]?.suit === led;
@@ -130,7 +132,7 @@ export class TressetteAI implements IAIPlayer {
     const avail = (
       state as unknown as { availableDeclarations?: TressetteDeclarationType[] }
     ).availableDeclarations;
-    if (state.canDeclare && avail && avail.length > 0) {
+    if (!isMorto && state.canDeclare && avail && avail.length > 0) {
       const decls: { type: TressetteDeclarationType; cardIds: string[] }[] = [];
       if (avail.includes(TressetteDeclarationType.NAPOLETANA)) {
         const napo = napoletanaIfAny(hand);
@@ -155,8 +157,12 @@ export class TressetteAI implements IAIPlayer {
       }
     }
 
-    if (!state.currentTrick.length) {
-      move.chat = this.buildLeadChat(pick, hand);
+    if (!isMorto) {
+      if (!state.currentTrick.length) {
+        move.chat = this.buildLeadChat(pick, hand);
+      } else {
+        move.chat = this.buildFollowChat(pick, state);
+      }
     }
 
     void playerId;
@@ -188,6 +194,18 @@ export class TressetteAI implements IAIPlayer {
     }
 
     return 'Messo male...';
+  }
+
+  private buildFollowChat(pick: Card, state: TressetteClientState): string | undefined {
+    const led = state.currentTrick[0]?.card.suit;
+    if (!led) return undefined;
+    if (pick.suit !== led) {
+      return Math.random() < 0.5 ? 'Liscio!' : undefined;
+    }
+    if (VALUABLE_RANKS.has(pick.rank)) {
+      return Math.random() < 0.6 ? 'E con questo!' : undefined;
+    }
+    return Math.random() < 0.25 ? 'Busso!' : undefined;
   }
 
   private isLikelyWinning(

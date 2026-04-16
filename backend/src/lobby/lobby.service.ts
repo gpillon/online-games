@@ -378,7 +378,15 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
         ? (room.config.options['targetScore'] as number)
         : undefined,
     );
-    for (const p of room.players) {
+    const playersToAdd = [...room.players];
+    if (room.config.options['randomTeams']) {
+      for (let i = playersToAdd.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [playersToAdd[i], playersToAdd[j]] = [playersToAdd[j], playersToAdd[i]];
+      }
+      playersToAdd.forEach((p, idx) => { p.seatIndex = idx; });
+    }
+    for (const p of playersToAdd) {
       engine.addPlayer({ ...p });
     }
     engine.start();
@@ -446,6 +454,19 @@ export class LobbyService implements OnModuleInit, OnModuleDestroy {
       room.gameId = undefined;
     }
     room.status = GameStatus.FINISHED;
+  }
+
+  resetRoomForRematch(roomId: string): void {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (room.gameId) {
+      this.gamesService.removeGame(room.gameId);
+      room.gameId = undefined;
+    }
+    room.status = GameStatus.WAITING;
+    for (const p of room.players) {
+      (p as unknown as Record<string, unknown>)['connected'] = true;
+    }
   }
 }
 

@@ -34,5 +34,7 @@ export const WS_EVENTS = {
   ROOM_KICK: 'room:kick',
   ROOM_REORDER: 'room:reorder',
   ROOM_REMOVE_AI: 'room:remove_ai',
+  GAME_REMATCH_REQUEST: 'game:rematch_request',
+  GAME_REMATCH_STATUS: 'game:rematch_status',
   ERROR: 'error',
 } as const;

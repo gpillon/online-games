@@ -4,8 +4,10 @@ import {
   Get,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -22,8 +24,16 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Body() dto: RegisterDto, @Req() req: Request) {
+    const xf = req.headers['x-forwarded-for'];
+    const forwarded =
+      typeof xf === 'string'
+        ? xf.split(',')[0]?.trim()
+        : Array.isArray(xf)
+          ? xf[0]
+          : undefined;
+    const ip = req.ip || forwarded || 'unknown';
+    return this.authService.register(dto, ip);
   }
 
   @Post('login')

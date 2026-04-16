@@ -71,6 +71,24 @@ export function playGameEndSound() {
   });
 }
 
+export function playDeclarationSound() {
+  const ctx = getCtx();
+  const freqs = [523, 659, 784, 1047];
+  freqs.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'triangle';
+    const t = ctx.currentTime + i * 0.08;
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    osc.start(t);
+    osc.stop(t + 0.25);
+  });
+}
+
 export function playYourTurnSound() {
   const ctx = getCtx();
   const osc = ctx.createOscillator();

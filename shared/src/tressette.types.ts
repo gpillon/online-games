@@ -44,6 +44,8 @@ export interface TressetteClientState {
   availableDeclarations?: TressetteDeclarationType[];
   drawnCards?: { playerId: string; card: Card }[];
   mortoHand?: Card[];
+  mortoSeatIndex?: number | null;
+  isMortoTurn?: boolean;
 }
 
 export interface TressettePlayerInfo {
@@ -69,6 +71,7 @@ export interface TressetteDeclaration {
   type: TressetteDeclarationType;
   cards: Card[];
   points: number;
+  detail?: string;
 }
 
 export enum TressetteDeclarationType {

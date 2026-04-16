@@ -5,6 +5,7 @@ import { GameScoreEntity } from '../users/entities/game-score.entity';
 import { HeadToHeadEntity } from '../users/entities/head-to-head.entity';
 import { EmoteEntity } from '../emotes/entities/emote.entity';
 import { LobbyRoomEntity } from '../lobby/entities/lobby-room.entity';
+import { EmailRateLimitEntity } from '../auth/entities/email-rate-limit.entity';
 
 export default registerAs(
   'database',
@@ -15,7 +16,14 @@ export default registerAs(
     username: process.env.DB_USER ?? 'postgres',
     password: process.env.DB_PASSWORD ?? 'postgres',
     database: process.env.DB_NAME ?? 'online_games',
-    entities: [UserEntity, GameScoreEntity, HeadToHeadEntity, EmoteEntity, LobbyRoomEntity],
+    entities: [
+      UserEntity,
+      GameScoreEntity,
+      HeadToHeadEntity,
+      EmoteEntity,
+      LobbyRoomEntity,
+      EmailRateLimitEntity,
+    ],
     synchronize: process.env.TYPEORM_SYNC === 'true',
     logging: process.env.TYPEORM_LOGGING === 'true',
   }),

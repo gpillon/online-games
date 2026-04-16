@@ -1,8 +1,8 @@
 import type { Card, TressettePlayerInfo } from '@online-games/shared';
 import * as OG from '@online-games/shared';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Eye, Trophy } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Eye, RotateCcw, Trophy } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CardComponent } from '@/components/game/CardComponent';
 import { GameTable, type TableSeat } from '@/components/game/GameTable';
@@ -14,13 +14,18 @@ import { TrickArea } from '@/components/game/TrickArea';
 import { Button } from '@/components/ui/Button';
 import { GlassPanel } from '@/components/ui/Card';
 import type { GameViewProps } from '@/games/registry';
+import { useViewportWidth } from '@/hooks/useViewportWidth';
 import {
   playCardSound,
+  playDeclarationSound,
   playGameEndSound,
   playGameStartSound,
   playYourTurnSound,
 } from '@/lib/sounds';
+import { WS_EVENTS } from '@/lib/wsEvents';
+import { getSocket } from '@/services/socket';
 import { useGameStore } from '@/stores/gameStore';
+import { useLobbyStore } from '@/stores/lobbyStore';
 
 interface FloatingAnnouncement {
   id: string;
@@ -48,7 +53,13 @@ export function TressetteGame({ gameId }: GameViewProps) {
   const [drawnCardsDisplay, setDrawnCardsDisplay] = useState<{ playerId: string; playerName: string; card: Card }[] | null>(null);
   const prevDrawnRef = useRef<string | null>(null);
   const drawnTimerRef = useRef<number | null>(null);
+  const [rematchAccepted, setRematchAccepted] = useState<string[]>([]);
+  const [rematchNeeded, setRematchNeeded] = useState(0);
+  const [rematchRequested, setRematchRequested] = useState(false);
+  const currentRoom = useLobbyStore((s) => s.currentRoom);
 
+  const vw = useViewportWidth();
+  const isMobile = vw < 640;
   const players = client?.players ?? [];
   const numPlayers = Math.max(players.length, 2);
   const isSpectator = client?.myIndex === -1 || (client as unknown as { spectator?: boolean })?.spectator === true;
@@ -57,13 +68,21 @@ export function TressetteGame({ gameId }: GameViewProps) {
   const mySeat = mePlayer?.seatIndex ?? 0;
   const myTeam = mePlayer?.team ?? 0;
 
-  const currentPlayer = client ? players[client.currentPlayerIndex] : undefined;
-  const currentSeat = currentPlayer?.seatIndex ?? -1;
+  const isMortoTurn = !!(client as unknown as { isMortoTurn?: boolean })?.isMortoTurn;
+  const currentSeat = client?.currentPlayerIndex ?? -1;
+  const currentPlayer = players.find((p) => p.seatIndex === currentSeat);
+
+  const myTurnForOwnHand = useMemo(() => {
+    if (isSpectator || !client || !mePlayer) return false;
+    if (isMortoTurn) return false;
+    return currentPlayer ? mePlayer.id === currentPlayer.id : false;
+  }, [isSpectator, client, mePlayer, currentPlayer, isMortoTurn]);
 
   const myTurn = useMemo(() => {
-    if (isSpectator || !client || !mePlayer || !currentPlayer) return false;
-    return mePlayer.id === currentPlayer.id;
-  }, [isSpectator, client, mePlayer, currentPlayer]);
+    if (isSpectator || !client || !mePlayer) return false;
+    if (isMortoTurn) return mePlayer.seatIndex === client.dealer;
+    return currentPlayer ? mePlayer.id === currentPlayer.id : false;
+  }, [isSpectator, client, mePlayer, currentPlayer, isMortoTurn]);
 
   const teamANames = players.filter((p) => p.team === 0).map((p) => p.name);
   const teamBNames = players.filter((p) => p.team === 1).map((p) => p.name);
@@ -107,12 +126,15 @@ export function TressetteGame({ gameId }: GameViewProps) {
     const decls = client?.declarations ?? [];
     if (decls.length > prevDeclCountRef.current) {
       const newDecls = decls.slice(prevDeclCountRef.current);
+      playDeclarationSound();
       const newAnnouncements = newDecls.map((d) => {
         const pName = players.find((p) => p.id === d.playerId)?.name ?? '?';
         const label = d.type === OG.TressetteDeclarationType.NAPOLETANA ? 'Napoletana' : 'Buon gioco';
+        const detail = (d as unknown as { detail?: string }).detail;
+        const detailStr = detail ? ` (${detail})` : '';
         return {
           id: `${d.playerId}-${d.type}-${Date.now()}`,
-          text: `${pName}: ${label}! (+${d.points} pt)`,
+          text: `${pName}: ${label}${detailStr}! (+${d.points} pt)`,
           ts: Date.now(),
         };
       });
@@ -120,7 +142,7 @@ export function TressetteGame({ gameId }: GameViewProps) {
       for (const a of newAnnouncements) {
         setTimeout(() => {
           setAnnouncements((prev) => prev.filter((x) => x.id !== a.id));
-        }, 4000);
+        }, 5000);
       }
     }
     prevDeclCountRef.current = decls.length;
@@ -145,6 +167,31 @@ export function TressetteGame({ gameId }: GameViewProps) {
       drawnTimerRef.current = null;
     }, 2500);
   }, [client?.drawnCards, players]);
+
+  useEffect(() => {
+    const s = getSocket();
+    if (!s) return;
+    const handler = (data: { accepted: string[]; needed: number }) => {
+      setRematchAccepted(data.accepted);
+      setRematchNeeded(data.needed);
+    };
+    s.on(WS_EVENTS.GAME_REMATCH_STATUS, handler);
+    return () => { s.off(WS_EVENTS.GAME_REMATCH_STATUS, handler); };
+  }, []);
+
+  useEffect(() => {
+    if (client?.status !== OG.GameStatus.FINISHED) {
+      setRematchRequested(false);
+      setRematchAccepted([]);
+      setRematchNeeded(0);
+    }
+  }, [client?.status]);
+
+  const requestRematch = useCallback(() => {
+    if (!currentRoom) return;
+    getSocket()?.emit(WS_EVENTS.GAME_REMATCH_REQUEST, { roomId: currentRoom.id });
+    setRematchRequested(true);
+  }, [currentRoom]);
 
   if (!client) {
     return (
@@ -183,31 +230,65 @@ export function TressetteGame({ gameId }: GameViewProps) {
         trickWinnerSeat={trickWinnerSeat}
       />
       {(() => {
+        const SUIT_LABELS: Record<string, string> = { bastoni: 'Bastoni', coppe: 'Coppe', denara: 'Denari', spade: 'Spade' };
+        const RANK_LABELS: Record<number, string> = { 1: 'Assi', 2: 'Due', 3: 'Tre' };
+        const hand = client.myHand;
         const pendingTypes = new Set(pendingDecls.map((d) => d.type));
         const remaining = availableDeclarations.filter((t) => !pendingTypes.has(t as OG.TressetteDeclarationType));
-        return client.canDeclare && remaining.length > 0 ? (
+        if (!client.canDeclare || remaining.length === 0) return null;
+
+        const napoOptions: { suit: string; label: string; ids: string[] }[] = [];
+        if (remaining.includes(OG.TressetteDeclarationType.NAPOLETANA)) {
+          const bySuit = new Map<string, typeof hand>();
+          for (const c of hand) {
+            const arr = bySuit.get(c.suit) ?? [];
+            arr.push(c);
+            bySuit.set(c.suit, arr);
+          }
+          for (const [suit, cards] of bySuit) {
+            const ranks = new Set(cards.map((c) => c.rank));
+            if (ranks.has(1) && ranks.has(2) && ranks.has(3)) {
+              const trio = cards.filter((c) => [1, 2, 3].includes(c.rank)).slice(0, 3);
+              napoOptions.push({ suit, label: SUIT_LABELS[suit] ?? suit, ids: trio.map((c) => c.id) });
+            }
+          }
+        }
+
+        const bongOptions: { rank: number; label: string; ids: string[] }[] = [];
+        if (remaining.includes(OG.TressetteDeclarationType.BONGIOCO)) {
+          for (const r of [1, 2, 3]) {
+            const matching = hand.filter((c) => c.rank === r);
+            if (matching.length >= 3) {
+              bongOptions.push({ rank: r, label: RANK_LABELS[r] ?? String(r), ids: matching.slice(0, 3).map((c) => c.id) });
+            }
+          }
+        }
+
+        return (napoOptions.length > 0 || bongOptions.length > 0) ? (
           <GlassPanel className="flex max-w-full flex-wrap items-center justify-center gap-2 px-3 py-3 sm:gap-4 sm:px-6 sm:py-4">
             <span className="mb-1 w-full text-center font-display text-sm text-gold sm:text-base">Dichiarazioni</span>
-            {remaining.includes(OG.TressetteDeclarationType.NAPOLETANA) && (
+            {napoOptions.map((opt) => (
               <Button
+                key={`napo-${opt.suit}`}
                 type="button"
                 variant="secondary"
                 className="text-xs"
-                onClick={() => sendDeclaration(OG.TressetteDeclarationType.NAPOLETANA, [])}
+                onClick={() => sendDeclaration(OG.TressetteDeclarationType.NAPOLETANA, opt.ids)}
               >
-                Napoletana
+                Napoletana ({opt.label})
               </Button>
-            )}
-            {remaining.includes(OG.TressetteDeclarationType.BONGIOCO) && (
+            ))}
+            {bongOptions.map((opt) => (
               <Button
+                key={`bong-${opt.rank}`}
                 type="button"
                 variant="ghost"
                 className="text-xs"
-                onClick={() => sendDeclaration(OG.TressetteDeclarationType.BONGIOCO, [])}
+                onClick={() => sendDeclaration(OG.TressetteDeclarationType.BONGIOCO, opt.ids)}
               >
-                Buon gioco
+                Buon gioco ({opt.label})
               </Button>
-            )}
+            ))}
           </GlassPanel>
         ) : null;
       })()}
@@ -229,16 +310,16 @@ export function TressetteGame({ gameId }: GameViewProps) {
       className={`mx-auto flex max-w-6xl flex-col gap-3 overflow-x-hidden px-2 pt-3 sm:gap-6 sm:px-3 sm:pt-4 md:px-4 ${isSpectator ? 'pb-6 sm:pb-8' : 'pb-20 sm:pb-28'}`}
     >
       {/* Declaration announcements */}
-      <div className="pointer-events-none fixed left-1/2 top-16 z-[60] w-[calc(100%-1rem)] max-w-lg -translate-x-1/2 px-2 sm:top-24 sm:w-auto sm:max-w-none sm:px-0">
+      <div className="pointer-events-none fixed left-1/2 top-20 z-[60] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 sm:top-28 sm:max-w-2xl">
         <AnimatePresence>
           {announcements.map((a) => (
             <motion.div
               key={a.id}
-              className="mb-2 rounded-full bg-gradient-to-r from-gold/90 to-amber-500/90 px-3 py-1.5 text-center font-display text-xs font-bold tracking-wide text-black shadow-xl shadow-gold/30 sm:mb-3 sm:whitespace-nowrap sm:px-6 sm:py-2 sm:text-sm"
-              initial={{ opacity: 0, y: -30, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.8 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className="mb-3 rounded-2xl border-2 border-gold/60 bg-gradient-to-br from-amber-900/95 via-yellow-800/95 to-gold/90 px-6 py-4 text-center font-display text-lg font-bold tracking-wide text-white shadow-2xl shadow-gold/40 sm:mb-4 sm:px-10 sm:py-5 sm:text-2xl"
+              initial={{ opacity: 0, y: -40, scale: 0.6 }}
+              animate={{ opacity: 1, y: 0, scale: [1, 1.05, 1] }}
+              exit={{ opacity: 0, y: -30, scale: 0.7 }}
+              transition={{ type: 'spring', stiffness: 250, damping: 18 }}
             >
               {a.text}
             </motion.div>
@@ -246,37 +327,25 @@ export function TressetteGame({ gameId }: GameViewProps) {
         </AnimatePresence>
       </div>
 
-      {/* Drawn cards overlay (2-player mode) */}
+      {/* Drawn cards banner (2-player mode) */}
       <AnimatePresence>
         {drawnCardsDisplay && (
           <motion.div
-            className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            className="pointer-events-none fixed left-1/2 top-16 z-[55] -translate-x-1/2"
+            initial={{ opacity: 0, y: -30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 22 }}
           >
-            <motion.div
-              className="flex flex-col items-center gap-6"
-              initial={{ scale: 0.7, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-            >
-              <p className="px-2 text-center font-display text-xl text-gold sm:text-2xl">Carte pescate</p>
-              <div className="flex max-w-full flex-wrap items-center justify-center gap-6 px-2 sm:gap-10">
-                {drawnCardsDisplay.map((d) => (
-                  <div key={d.card.id} className="flex flex-col items-center gap-2 sm:gap-3">
-                    <div className="origin-center scale-[0.82] sm:scale-100">
-                      <CardComponent card={d.card} width={100} height={142} disabled />
-                    </div>
-                    <span className="max-w-[10rem] truncate text-center font-display text-xs text-ivory/90 sm:max-w-none sm:text-sm">
-                      {d.playerName}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
+            <div className="flex items-center gap-4 rounded-2xl border border-gold/40 bg-black/80 px-5 py-3 shadow-2xl backdrop-blur-sm">
+              <span className="font-display text-sm text-gold">Pescate:</span>
+              {drawnCardsDisplay.map((d) => (
+                <div key={d.card.id} className="flex items-center gap-2">
+                  <CardComponent card={d.card} width={48} height={68} disabled />
+                  <span className="font-display text-xs text-ivory/80">{d.playerName}</span>
+                </div>
+              ))}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -334,20 +403,7 @@ export function TressetteGame({ gameId }: GameViewProps) {
         </GlassPanel>
       </div>
 
-      {client.mortoHand && client.mortoHand.length > 0 && (
-        <GlassPanel className="max-w-full overflow-hidden px-3 py-2 sm:px-4 sm:py-3">
-          <p className="mb-2 text-center font-display text-xs text-gold sm:text-sm">
-            Carte del Morto ({client.mortoHand.length})
-          </p>
-          <div className="flex max-w-full flex-wrap justify-center gap-0.5 sm:gap-1">
-            {client.mortoHand.map((card) => (
-              <div key={card.id} className="origin-top shrink-0 scale-[0.88] sm:scale-100">
-                <CardComponent card={card} width={56} height={80} disabled />
-              </div>
-            ))}
-          </div>
-        </GlassPanel>
-      )}
+      {/* morto hand is shown at the morto seat on the table */}
 
       <GameTable
         numPlayers={numPlayers}
@@ -360,12 +416,36 @@ export function TressetteGame({ gameId }: GameViewProps) {
           if (slot === 'south') {
             return <PlayerPlate player={p} isTurn={isTurn} cardCount={client.myHand.length} compact />;
           }
+          if (p.isMorto && client.mortoHand) {
+            const mortoClickable = isMortoTurn && myTurn && statusPlaying;
+            return (
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex flex-wrap justify-center gap-0.5">
+                  {client.mortoHand.map((card) => (
+                    <div
+                      key={card.id}
+                      className={mortoClickable ? 'cursor-pointer transition-transform hover:-translate-y-1' : ''}
+                      onClick={mortoClickable ? () => {
+                        playCardSound();
+                        playCard(card.id);
+                      } : undefined}
+                    >
+                      <CardComponent card={card} width={44} height={63} disabled={!mortoClickable} />
+                    </div>
+                  ))}
+                </div>
+                <PlayerPlate player={p} isTurn={isTurn} cardCount={client.mortoHand.length} compact />
+              </div>
+            );
+          }
           return (
             <div className="flex flex-col items-center gap-2">
-              <OpponentHand
-                count={p.cardCount}
-                orientation={slot === 'north' ? 'top' : slot === 'west' ? 'left' : 'right'}
-              />
+              {!isMobile && (
+                <OpponentHand
+                  count={p.cardCount}
+                  orientation={slot === 'north' ? 'top' : slot === 'west' ? 'left' : 'right'}
+                />
+              )}
               <PlayerPlate player={p} isTurn={isTurn} cardCount={p.cardCount} compact />
             </div>
           );
@@ -410,11 +490,32 @@ export function TressetteGame({ gameId }: GameViewProps) {
                 Tu eri nella <span className="font-display text-gold">{myTeam === 0 ? 'Squadra A' : 'Squadra B'}</span>
               </p>
             )}
-            <Link to="/lobby">
-              <Button type="button" variant="primary" className="mt-6 text-lg">
-                Torna alla sala
-              </Button>
-            </Link>
+            <div className="mt-6 flex flex-col items-center gap-3">
+              {!isSpectator && (
+                <div className="flex flex-col items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="text-base"
+                    disabled={rematchRequested}
+                    onClick={requestRematch}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    {rematchRequested ? 'In attesa…' : 'Rivincita'}
+                  </Button>
+                  {rematchNeeded > 0 && (
+                    <p className="font-body text-xs text-gold/60">
+                      {rematchAccepted.length}/{rematchNeeded} giocatori pronti
+                    </p>
+                  )}
+                </div>
+              )}
+              <Link to="/lobby">
+                <Button type="button" variant="primary" className="text-lg">
+                  Torna alla sala
+                </Button>
+              </Link>
+            </div>
           </motion.div>
         </motion.div>
       )}
@@ -442,7 +543,7 @@ export function TressetteGame({ gameId }: GameViewProps) {
                   window.setTimeout(() => setSelectedId(null), 320);
                 }}
                 validCardIds={validCardIds}
-                myTurn={myTurn}
+                myTurn={myTurnForOwnHand}
               />
             </motion.div>
           )}

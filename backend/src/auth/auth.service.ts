@@ -13,6 +13,7 @@ import { UsersService } from '../users/users.service';
 import { UserEntity } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './jwt.strategy';
+import { EmailRateLimitService } from './email-rate-limit.service';
 
 @Injectable()
 export class AuthService {
@@ -22,9 +23,20 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly emailRateLimitService: EmailRateLimitService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<AuthResponse> {
+  async register(dto: RegisterDto, ip: string): Promise<AuthResponse> {
+    await this.emailRateLimitService.checkAndRecord(ip);
+
+    const recaptchaSecret = this.config.get<string>('RECAPTCHA_SECRET_KEY');
+    if (recaptchaSecret) {
+      if (!dto.captchaToken) {
+        throw new BadRequestException('CAPTCHA verification required');
+      }
+      await this.verifyRecaptcha(dto.captchaToken, recaptchaSecret);
+    }
+
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
       throw new BadRequestException('Email already registered');
@@ -161,5 +173,30 @@ export class AuthService {
       text: `Click to verify: ${verifyUrl}`,
       html: `<p>Verify your email by <a href="${verifyUrl}">clicking here</a>.</p>`,
     });
+  }
+
+  private async verifyRecaptcha(
+    token: string,
+    secret: string,
+  ): Promise<void> {
+    const params = new URLSearchParams();
+    params.set('secret', secret);
+    params.set('response', token);
+    const res = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    const data = (await res.json()) as {
+      success: boolean;
+      score?: number;
+      'error-codes'?: string[];
+    };
+    if (!data.success) {
+      this.logger.warn(
+        `reCAPTCHA verification failed: ${JSON.stringify(data['error-codes'])}`,
+      );
+      throw new BadRequestException('CAPTCHA verification failed');
+    }
   }
 }
